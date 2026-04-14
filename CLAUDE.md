@@ -7,7 +7,7 @@ Public dbt project modeling the CFPB Consumer Complaint Database on BigQuery. Se
 Service account keys live in `~/.secrets/dbt-portfolio/` (two keys: one for dbt automation, one for interactive/CLI/DBCode use).
 
 Exact paths, GCP project ID, and BigQuery quota settings are documented in the private planning doc:
-`~/notes/105-career/03-skill-building/dbt-portfolio/README.md` (Session Handoff section).
+`$PRIVATE_NOTES_DIR/README.md` (Session Handoff section).
 
 Global convention for secrets layout: `~/.claude/claude-technical.md` § Secrets.
 

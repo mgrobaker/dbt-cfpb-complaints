@@ -1,0 +1,9 @@
+[project]
+name = "dbt-cfpb-complaints"
+version = "0.1.0"
+description = "dbt project modeling the CFPB Consumer Complaint Database on BigQuery"
+requires-python = ">=3.10"
+dependencies = [
+    "dbt-bigquery>=1.11.1",
+    "dbt-core>=1.11.8",
+]

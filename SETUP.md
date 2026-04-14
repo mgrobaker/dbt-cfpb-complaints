@@ -4,7 +4,7 @@ Getting this project running locally.
 
 ## Prerequisites
 
-- Python 3.10+ and [`uv`](https://github.com/astral-sh/uv) (or any virtualenv tool)
+- Python 3.10+ and [`uv`](https://github.com/astral-sh/uv)
 - A Google Cloud project with BigQuery enabled
 - Billing enabled on the GCP project (BigQuery free tier is generous — 10 GB storage + 1 TB queries/month)
 - `git`
@@ -25,9 +25,9 @@ In the GCP console:
    - `roles/bigquery.dataEditor` — read + create/update tables
    - `roles/bigquery.jobUser` — run queries (billing)
 3. **Keys → Add key → Create new key → JSON**. Download the file.
-4. Move the key to a location **outside this repo**. A stable location under your home directory is recommended, e.g.:
-   - Linux/macOS: `~/.config/gcloud/<project>-key.json` or a dedicated `~/.secrets/<project>/` folder
-   - Windows: `%USERPROFILE%\.gcp\<project>-key.json`
+4. Move the key to a location **outside this repo**. A dedicated folder under your home directory is recommended:
+   - Linux/macOS: `~/.secrets/<project>/<key>.json`
+   - Windows: `%USERPROFILE%\.gcp\<key>.json`
 
    `chmod 600` the file (Linux/macOS) so only you can read it.
 
@@ -35,46 +35,55 @@ In the GCP console:
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in the absolute path to your key file, project ID, and region.
+# Edit .env: absolute path to key file, GCP project ID, BigQuery location (e.g. US).
 ```
 
 Load `.env` into your shell (pick one):
 
 ```bash
-# Option A: direnv
+# Option A: direnv (recommended — auto-loads on cd into repo)
 direnv allow
 
-# Option B: one-off
+# Option B: one-off per shell
 set -a; source .env; set +a
-```
-
-Verify:
-
-```bash
-gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-bq ls --project_id="$GCP_PROJECT_ID"
 ```
 
 ## 4. Install dbt
 
+Dependencies are pinned via `pyproject.toml` + `uv.lock` for reproducible builds.
+
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install dbt-core dbt-bigquery
+uv sync
 ```
 
-## 5. Configure dbt profile
+This creates `.venv/` and installs the exact versions from `uv.lock`. Run dbt via `uv run`:
 
-_Profile details will be documented here once the dbt project is scaffolded. For now, see the dbt-bigquery [service-account-file auth docs](https://docs.getdbt.com/docs/core/connect-data-platform/bigquery-setup#service-account-file)._
+```bash
+uv run dbt --version
+```
+
+(Or activate the venv with `source .venv/bin/activate` if you prefer.)
+
+## 5. dbt profile
+
+This repo commits a `profiles.yml` in the project root that reads credentials from environment variables — no secrets in the file. dbt discovers it automatically when run from the repo root.
+
+Required env vars (set via `.env`):
+- `GOOGLE_APPLICATION_CREDENTIALS` — absolute path to your service account JSON
+- `GCP_PROJECT_ID` — your BigQuery project ID
+- `BQ_LOCATION` — BigQuery region (e.g. `US`)
 
 ## 6. Verify connection
 
 ```bash
-dbt debug
+uv run dbt debug
 ```
+
+This validates: Python version, dbt install, profile resolution, BigQuery credentials, and connectivity. If all checks pass, you're ready to build.
 
 ## Secrets policy
 
-- **Never commit** service account keys, `.env` files, or `profiles.yml` with credentials. `.gitignore` excludes these by default.
-- The key file should live **outside the repo**. This repo will never reference its absolute path in committed code — only via the `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
-- If a key is ever committed by accident, **rotate it immediately** in the GCP console (delete the key, create a new one) — revoking is the only remediation; git history rewrites don't help once a key has been pushed.
+- **Never commit** service account keys or `.env` files. `.gitignore` excludes these.
+- The committed `profiles.yml` contains only `env_var(...)` references — no secrets.
+- The key file lives **outside the repo**, referenced only via `GOOGLE_APPLICATION_CREDENTIALS`.
+- If a key is ever committed by accident, **rotate it immediately** in the GCP console (delete the key, create a new one). Git history rewrites don't help once a key has been pushed.

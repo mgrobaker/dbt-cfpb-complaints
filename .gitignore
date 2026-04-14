@@ -12,8 +12,8 @@ __pycache__/
 # Credentials — keys live in ~/.secrets/, never in repo
 *.json
 !package-lock.json
-profiles.yml
 .env
+# profiles.yml IS committed; it contains only env_var() references, no secrets.
 
 # Editor
 .vscode/
