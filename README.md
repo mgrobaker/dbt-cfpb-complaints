@@ -18,6 +18,10 @@ A dbt project modeling the [CFPB Consumer Complaint Database](https://www.consum
 - Company-name normalization (same company appears under many string variants)
 - Join with FDIC institutions data for bank metadata enrichment
 
+## Setup
+
+See [SETUP.md](./SETUP.md) for local installation and credentials.
+
 ## Structure
 
 _To be filled in as the project develops._
