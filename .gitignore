@@ -1,0 +1,22 @@
+# dbt
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Credentials — keys live in ~/.secrets/, never in repo
+*.json
+!package-lock.json
+profiles.yml
+.env
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
