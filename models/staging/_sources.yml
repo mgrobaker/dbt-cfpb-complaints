@@ -1,0 +1,29 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: raw
+    description: >
+      Raw tables loaded outside dbt. CFPB materialized from the BigQuery
+      public dataset `bigquery-public-data.cfpb_complaints.complaint_database`
+      (frozen 2023-03-25, narrative column dropped). FDIC loaded from the
+      FDIC BankFind active-institutions export.
+    tables:
+      - name: cfpb_complaints
+        description: CFPB Consumer Complaint Database, 2011-12 through 2023-03.
+        columns:
+          - name: complaint_id
+            description: Natural primary key.
+            tests:
+              - not_null
+              - unique
+
+      - name: fdic_active_banks_lean
+        description: Active FDIC-insured institutions, trimmed to 95 analytically useful columns.
+        columns:
+          - name: fdic_certificate_number
+            description: FDIC certificate number — natural primary key.
+            tests:
+              - not_null
+              - unique

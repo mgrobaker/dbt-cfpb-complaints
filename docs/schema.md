@@ -65,7 +65,12 @@ Active FDIC institutions, trimmed from 117 → 95 cols. All `active = TRUE`. Loa
 | 10 | `denovo_institute` | BOOL | |
 | 50 | `fdic_insured` | BOOL | |
 | 51 | `deposit_insurance_date` | DATE | |
-| 52–57 | various insurance fund flags | BOOL/STRING | |
+| 52 | `deposit_insurance_fund_member` | BOOL | |
+| 53 | `bank_insurance_fund_member` | BOOL | |
+| 54 | `insurance_fund_membership` | STRING | |
+| 55 | `secondary_insurance_fund` | STRING | |
+| 56 | `insured_commercial_bank` | BOOL | |
+| 57 | `insured_savings_institute` | BOOL | |
 
 ### Location (cols 11–28)
 
@@ -79,7 +84,16 @@ Active FDIC institutions, trimmed from 117 → 95 cols. All `active = TRUE`. Loa
 | 16 | `zip_code` | STRING | |
 | 17 | `county_name` | STRING | |
 | 18 | `county_fips_code` | STRING | |
-| 19–28 | CBSA / CSA metro area dims | various | Geographic enrichment |
+| 19 | `cbsa_name` | STRING | Core-Based Statistical Area name |
+| 20 | `cbsa_fips_code` | STRING | |
+| 21 | `cbsa_metro_flag` | BOOL | |
+| 22 | `cbsa_micro_flag` | BOOL | |
+| 23 | `cbsa_division_name` | STRING | |
+| 24 | `cbsa_division_fips_code` | STRING | |
+| 25 | `cbsa_division_flag` | BOOL | |
+| 26 | `csa_name` | STRING | Combined Statistical Area name |
+| 27 | `csa_fips_code` | STRING | |
+| 28 | `csa_indicator` | BOOL | |
 
 ### Charter & regulator (cols 29–46)
 
