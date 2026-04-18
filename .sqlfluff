@@ -1,0 +1,9 @@
+[sqlfluff]
+templater = dbt
+dialect = bigquery
+
+[sqlfluff:templater:dbt]
+project_dir = .
+profiles_dir = .
+profile = cfpb_complaints
+target = dev

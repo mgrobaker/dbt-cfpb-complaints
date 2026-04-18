@@ -11,19 +11,66 @@ sources:
       FDIC BankFind active-institutions export.
     tables:
       - name: cfpb_complaints
-        description: CFPB Consumer Complaint Database, 2011-12 through 2023-03.
+        description: >
+          CFPB Consumer Complaint Database, 2011-12 through 2023-03.
+          3,458,906 rows. Narrative text dropped at materialize time
+          (2.31 GB → 768 MB); replaced with boolean `has_narrative`.
         columns:
           - name: complaint_id
             description: Natural primary key.
             tests:
               - not_null
               - unique
+          - name: product
+            description: Top-level product taxonomy. 18 distinct values, 0% null.
+          - name: subproduct
+            description: Product subcategory. 76 distinct values, 6.8% null.
+          - name: issue
+            description: Top-level issue taxonomy. 165 distinct values, 0% null.
+          - name: subissue
+            description: Issue subcategory. 221 distinct values, 20.2% null.
+          - name: company_name
+            description: >
+              Free-text company name as submitted. 6,694 distinct values.
+              Mixes parent corporations and subsidiaries — normalization target downstream.
+          - name: state
+            description: 2-char US state/territory code. 63 distinct values, 1.2% null.
+          - name: tags
+            description: Special-population tag (Older American, Servicemember, or both). 3 distinct values, 88.9% null.
+          - name: company_response_to_consumer
+            description: 8 distinct values, <0.1% null.
+          - name: company_public_response
+            description: Optional public statement from the company. 11 distinct values, 55.6% null.
+          - name: consumer_disputed
+            description: Legacy field — CFPB stopped collecting ~2017. 77.8% null.
+          - name: consumer_consent_provided
+            description: 4 distinct values, 25.2% null.
+          - name: has_narrative
+            description: >
+              Derived at raw materialize time. TRUE if the source row had a
+              non-empty `consumer_complaint_narrative`; the text itself was dropped.
 
       - name: fdic_active_banks_lean
-        description: Active FDIC-insured institutions, trimmed to 95 analytically useful columns.
+        description: >
+          Active FDIC-insured institutions, trimmed from 117 to 95 columns.
+          All rows have `active = TRUE`. 4,756 rows.
         columns:
           - name: fdic_certificate_number
             description: FDIC certificate number — natural primary key.
             tests:
               - not_null
               - unique
+          - name: institution_name
+            description: Operating bank legal name (e.g. "JPMorgan Chase Bank, National Association").
+          - name: top_holder
+            description: >
+              Parent holding company name (e.g. "JPMORGAN CHASE & CO.").
+              Primary bridge to CFPB `company_name` for bank-side complaint joins.
+          - name: cfpb_supervisory_flag
+            description: Whether the institution is under CFPB supervision.
+          - name: total_assets
+            description: Total assets in USD. Primary sort key for size-based analysis.
+          - name: ots_region
+            description: OTS region. Known "West" vs "Western" inconsistency in source — normalize in staging.
+          - name: row_pretax_quarterly
+            description: Pre-tax quarterly return on equity. Column name is a source typo (row_ should be roe_).

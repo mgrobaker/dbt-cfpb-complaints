@@ -1,0 +1,218 @@
+version: 2
+
+models:
+  - name: stg_cfpb_complaints
+    description: >
+      Staging pass over `raw.cfpb_complaints`. String columns trimmed; state uppercased.
+      Excludes 2011 (stub year, 2,536 rows) and 2023 (partial year, frozen 2023-03-23).
+      Effective date range: 2012-01-01 to 2022-12-31. One row per complaint.
+    columns:
+      - name: complaint_id
+        description: Natural primary key from CFPB.
+        tests:
+          - not_null
+          - unique
+
+      - name: date_received
+        description: Date CFPB received the complaint.
+        tests:
+          - not_null
+      - name: date_sent_to_company
+        description: Date CFPB forwarded the complaint to the named company.
+        tests:
+          - not_null
+
+      - name: product
+        description: >
+          Top-level product taxonomy (18 distinct values).
+          TODO: verify accepted_values list against `SELECT DISTINCT product FROM raw.cfpb_complaints`
+          before promoting severity to error.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - "Bank account or service"
+                  - "Checking or savings account"
+                  - "Consumer Loan"
+                  - "Credit card"
+                  - "Credit card or prepaid card"
+                  - "Credit reporting"
+                  - "Credit reporting, credit repair services, or other personal consumer reports"
+                  - "Debt collection"
+                  - "Money transfer, virtual currency, or money service"
+                  - "Money transfers"
+                  - "Mortgage"
+                  - "Other financial service"
+                  - "Payday loan"
+                  - "Payday loan, title loan, or personal loan"
+                  - "Prepaid card"
+                  - "Student loan"
+                  - "Vehicle loan or lease"
+                  - "Virtual currency"
+              config:
+                severity: warn
+      - name: subproduct
+        description: Product subcategory; ~7% null.
+      - name: issue
+        description: Top-level issue taxonomy (165 distinct values).
+      - name: subissue
+        description: Issue subcategory; ~20% null.
+
+      - name: company_name
+        description: >
+          Free-text company name as submitted. 6,694 distinct values; parent
+          corporations mixed with subsidiaries. Canonicalization happens
+          downstream via crosswalk seed.
+      - name: company_name_normalized
+        description: >
+          Derived from company_name: uppercased, internal whitespace collapsed
+          to a single space, trailing period/comma/semicolon stripped. Used for
+          grouping and crosswalk matching without altering the raw value.
+      - name: state
+        description: >
+          2-char US state/territory/military code, uppercased. Null remapped to
+          'not-provided'. "UNITED STATES MINOR OUTLYING ISLANDS" (305 rows) remapped
+          to ISO code 'UM'. Any other long-form value remapped to 'not-provided' as a
+          safety catch. Includes territories (PR, VI, GU, AS, MP, UM), military APO
+          codes (AA, AE, AP), and freely associated states (FM, MH, PW).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - "AA"
+                  - "AE"
+                  - "AK"
+                  - "AL"
+                  - "AP"
+                  - "AR"
+                  - "AS"
+                  - "AZ"
+                  - "CA"
+                  - "CO"
+                  - "CT"
+                  - "DC"
+                  - "DE"
+                  - "FL"
+                  - "FM"
+                  - "GA"
+                  - "GU"
+                  - "HI"
+                  - "IA"
+                  - "ID"
+                  - "IL"
+                  - "IN"
+                  - "KS"
+                  - "KY"
+                  - "LA"
+                  - "MA"
+                  - "MD"
+                  - "ME"
+                  - "MH"
+                  - "MI"
+                  - "MN"
+                  - "MO"
+                  - "MP"
+                  - "MS"
+                  - "MT"
+                  - "NC"
+                  - "ND"
+                  - "NE"
+                  - "NH"
+                  - "NJ"
+                  - "NM"
+                  - "NV"
+                  - "NY"
+                  - "OH"
+                  - "OK"
+                  - "OR"
+                  - "PA"
+                  - "PR"
+                  - "PW"
+                  - "RI"
+                  - "SC"
+                  - "SD"
+                  - "TN"
+                  - "TX"
+                  - "UT"
+                  - "VA"
+                  - "VI"
+                  - "VT"
+                  - "WA"
+                  - "WI"
+                  - "WV"
+                  - "WY"
+                  - "UM"
+                  - "not-provided"
+      - name: zip_code
+        description: 5-char ZIP; may be masked (XXXXX) for privacy.
+
+      - name: tags
+        description: Special-population tag (Older American, Servicemember). 89% null.
+      - name: submitted_via
+        description: >
+          Intake channel (Web, Phone, Referral, etc.).
+          TODO: verify accepted_values list against `SELECT DISTINCT submitted_via FROM raw.cfpb_complaints`.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - "Email"
+                  - "Fax"
+                  - "Phone"
+                  - "Postal mail"
+                  - "Referral"
+                  - "Web"
+                  - "Web Referral"
+              config:
+                severity: warn
+      - name: company_response_to_consumer
+        description: Resolution category returned by the company.
+      - name: company_public_response
+        description: Optional public statement from the company. 56% null.
+      - name: consumer_consent_provided
+        description: Whether the consumer consented to narrative publication.
+
+      - name: timely_response
+        description: Whether the company responded within CFPB's SLA.
+        tests:
+          - not_null
+      - name: consumer_disputed
+        description: Legacy field; CFPB stopped collecting ~2017. 78% null.
+      - name: has_narrative
+        description: >
+          Derived at raw materialize time. TRUE if the source row had a
+          non-empty `consumer_complaint_narrative`; the text itself was
+          dropped to shrink the table.
+
+  - name: stg_fdic_banks
+    description: >
+      Thin staging pass over `raw.fdic_active_banks_lean`. Renames
+      `fdic_certificate_number` → `fdic_cert`; trims identity/name text;
+      uppercases state. One row per active FDIC-insured institution.
+    columns:
+      - name: fdic_cert
+        description: FDIC certificate number — natural primary key.
+        tests:
+          - not_null
+          - unique
+
+      - name: institution_name
+        description: Operating bank legal name (e.g. "JPMorgan Chase Bank, National Association").
+      - name: top_holder
+        description: >
+          Parent holding company name (e.g. "JPMORGAN CHASE & CO."). Primary
+          bridge to CFPB `company_name` for bank-side complaint volume.
+      - name: trade_name_1
+        description: DBA / trade name if different from legal name.
+
+      - name: state
+        description: 2-char US state code; uppercased.
+      - name: cfpb_supervisory_flag
+        description: Whether institution is under CFPB supervision.
+      - name: total_assets
+        description: Total assets in USD. Sort key for size-based cohorts.
+      - name: active
+        description: Always TRUE in this table (source pre-filtered to active institutions).

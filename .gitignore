@@ -13,7 +13,7 @@ __pycache__/
 *.json
 !package-lock.json
 .env
-# profiles.yml IS committed; it contains only env_var() references, no secrets.
+# profiles.yml lives at ~/.dbt/profiles.yml (standard dbt location), not in repo.
 
 # Editor
 .vscode/

@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: >
+      Date spine from 2011-01-01 to 2023-12-31, one row per calendar day.
+      Generated via BigQuery GENERATE_DATE_ARRAY — no dbt-utils dependency.
+    columns:
+      - name: date_day
+        description: Calendar date — primary key and FK target for fact tables.
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_product
+    description: Distinct product/subproduct combinations. One row per unique pair.
+    columns:
+      - name: product_sk
+        description: >
+          Surrogate key: CAST(FARM_FINGERPRINT(product || '|' || COALESCE(subproduct, '')) AS STRING).
+          Same expression used in fct_complaints — no physical FK enforced in BigQuery.
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_issue
+    description: Distinct issue/subissue combinations. One row per unique pair.
+    columns:
+      - name: issue_sk
+        description: >
+          Surrogate key: CAST(FARM_FINGERPRINT(issue || '|' || COALESCE(subissue, '')) AS STRING).
+          Same expression used in fct_complaints — no physical FK enforced in BigQuery.
+        tests:
+          - not_null
+          - unique
+
+  - name: fct_complaints
+    description: >
+      One row per CFPB complaint. Carries dim surrogate keys as plain columns;
+      joins to dim_date, dim_product, dim_issue happen at query time.
+      company_sk placeholder for Phase 2 crosswalk enrichment.
+    columns:
+      - name: complaint_id
+        description: Natural primary key from CFPB.
+        tests:
+          - not_null
+          - unique
+      - name: date_day_received
+        description: FK to dim_date.date_day — equals date_received.
+      - name: product_sk
+        description: FK to dim_product.product_sk.
+      - name: issue_sk
+        description: FK to dim_issue.issue_sk.
+      - name: company_name_normalized
+        description: >
+          Uppercased, whitespace-collapsed, trailing-punct-stripped form of
+          company_name. Passed through from staging for pre-crosswalk grouping.
