@@ -13,7 +13,6 @@ GROUP BY days_early
 ORDER BY days_early DESC;
 
 -- Follow-up: are these concentrated in specific companies or years?
-/*
 SELECT
   EXTRACT(YEAR FROM date_received)                     AS year,
   company_name,
@@ -24,4 +23,4 @@ WHERE date_sent_to_company < date_received
 GROUP BY year, company_name
 ORDER BY violations DESC
 LIMIT 30;
-*/
+
