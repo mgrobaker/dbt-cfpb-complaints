@@ -9,7 +9,7 @@ select
 
     date_received                                                           as date_day_received,
     cast(
-        farm_fingerprint(concat(product, '|', coalesce(subproduct, '')))
+        farm_fingerprint(concat(product_normalized, '|', coalesce(subproduct_normalized, '')))
         as string
     )                                                                       as product_sk,
     cast(

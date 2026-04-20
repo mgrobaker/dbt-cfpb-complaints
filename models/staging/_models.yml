@@ -53,7 +53,28 @@ models:
               config:
                 severity: warn
       - name: subproduct
-        description: Product subcategory; ~7% null.
+        description: Product subcategory; ~7% null. Raw value from source — preserved for auditability.
+      - name: product_normalized
+        description: >
+          product with legacy CFPB taxonomy merged into current labels. Eight old categories
+          consolidated: Bank account or service → Checking or savings account; Consumer Loan →
+          Vehicle loan or lease or Payday loan, title loan, or personal loan (by subproduct);
+          Credit card → Credit card or prepaid card; Credit reporting → Credit reporting, credit
+          repair services, or other personal consumer reports; Money transfers → Money transfer,
+          virtual currency, or money service; Payday loan → Payday loan, title loan, or personal
+          loan; Prepaid card → Credit card or prepaid card; Virtual currency → Money transfer,
+          virtual currency, or money service. Unrecognized values pass through unchanged.
+      - name: subproduct_normalized
+        description: >
+          subproduct with legacy labels merged into current equivalents, consistent with
+          product_normalized. Key changes: Bank account or service subproduct label differences
+          resolved; Consumer Loan vehicle subproducts renamed to Loan / Lease; legacy single-product
+          null subproducts filled (Credit card → General-purpose credit card or charge card,
+          Credit reporting → Credit reporting, Payday loan → Payday loan); Prepaid card
+          subproducts mapped to Credit card or prepaid card equivalents; Debt collection
+          old-style subproducts normalized (added "debt" suffix: Credit card → Credit card debt,
+          Medical → Medical debt, etc.; Non-federal student loan → Private student loan debt).
+          Unrecognized values pass through unchanged.
       - name: issue
         description: Top-level issue taxonomy (165 distinct values).
       - name: subissue

@@ -1,10 +1,10 @@
--- Side-by-side name inspection + top_holder match hypothesis test.
--- FDIC has `top_holder` = parent holding company, which should match CFPB's parent-corp naming.
+-- FDIC active banks exploration: top holders, join hypothesis test against CFPB names.
+-- Key finding: FDIC `top_holder` matches CFPB's parent-corp naming better than institution_name.
 -- Run each block separately.
 
--- =============================================================
--- 5a: FDIC top 50 institutions by assets — see institution_name vs top_holder
--- =============================================================
+-- ================================================================
+-- 5a: FDIC top 50 institutions by assets — institution_name vs top_holder comparison
+-- ================================================================
 SELECT
   institution_name,
   top_holder,
@@ -16,9 +16,9 @@ FROM `dbt-portfolio-493318.raw.fdic_active_banks_lean`
 ORDER BY total_assets DESC NULLS LAST
 LIMIT 50;
 
--- =============================================================
--- 5b: FDIC distinct top_holder names (how many unique parent corps?)
--- =============================================================
+-- ================================================================
+-- 5b: Distinct top_holder names — how many unique parent corps, combined assets
+-- ================================================================
 SELECT
   top_holder,
   COUNT(*) AS subsidiaries,
@@ -29,10 +29,10 @@ GROUP BY top_holder
 ORDER BY combined_assets DESC NULLS LAST
 LIMIT 50;
 
--- =============================================================
+-- ================================================================
 -- 5c: Direct join test — CFPB company_name vs FDIC top_holder (uppercase-normalized)
--- Hypothesis: top_holder matches CFPB's parent-corp names much better than institution_name.
--- =============================================================
+-- Hypothesis: top_holder matches CFPB parent-corp names better than institution_name.
+-- ================================================================
 WITH cfpb AS (
   SELECT
     company_name,
@@ -64,9 +64,10 @@ FROM cfpb c
 LEFT JOIN fdic_holders h ON c.company_name_norm = h.top_holder_norm
 LEFT JOIN fdic_insts   i ON c.company_name_norm = i.institution_name_norm;
 
--- =============================================================
+-- ================================================================
 -- 5d: Top CFPB companies still unmatched after both joins
--- =============================================================
+-- Uncomment to run after 5c confirms top_holder is the right grain.
+-- ================================================================
 -- WITH fdic_all AS (
 --   SELECT DISTINCT UPPER(TRIM(top_holder)) AS norm
 --   FROM `dbt-portfolio-493318.raw.fdic_active_banks_lean` WHERE top_holder IS NOT NULL

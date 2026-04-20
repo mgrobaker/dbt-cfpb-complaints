@@ -5,7 +5,7 @@
 -- Cost: ~2.3 GB (one time). After this, exploration queries scan <200 MB each.
 -- Run once, then use `dbt-portfolio-493318.raw.cfpb_complaints` everywhere.
 --
--- NOTE: We keep the narrative column NULL-checked row count in 01_cfpb_summary.sql
+-- NOTE: We keep the narrative column NULL-checked row count in profile/overview.sql
 -- so we know fill rate, but we don't store the text itself here.
 -- If you ever want narratives for NLP/text work, go back to the public table.
 

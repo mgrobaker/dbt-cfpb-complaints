@@ -142,6 +142,38 @@ resolution and rename handling — is deferred to the company crosswalk seed in 
 complaints. These companies have no FDIC record; FDIC enrichment applies only to the
 bank-category subset of complaints.
 
+## Non-bank company types in top 50
+
+The top-50 companies by complaint volume include several non-bank categories that will not match FDIC data. Any FDIC enrichment applies only to the bank-category subset.
+
+| Category | Examples |
+|---|---|
+| Credit bureaus | Equifax, TransUnion, Experian, LexisNexis |
+| Debt collectors | Portfolio Recovery, Encore Capital, Resurgent, I.C. System, Convergent |
+| Mortgage servicers | Ocwen, Ditech, Nationstar, Shellpoint, LoanCare, Specialized Loan Servicing |
+| Student loan servicers | Navient, AES/PHEAA, Nelnet |
+| Fintechs | PayPal, Coinbase |
+| Auto/subprime lenders | Santander Consumer, Ally |
+
+---
+
+## FDIC join strategy
+
+A naive `JOIN ON company_name = fdic_institution_name` (even after uppercasing and trimming) will match well under 30% of complaint volume because:
+1. **CFPB uses parent corporation names**; FDIC lists operating bank subsidiaries (e.g. CFPB: "JPMORGAN CHASE & CO." / FDIC: "JPMorgan Chase Bank, National Association")
+2. **47% of volume is credit bureaus** — no FDIC record exists for these companies
+3. **Casing, punctuation, and suffixes** are inconsistent across both sources
+
+**Approach: hand-built crosswalk seed** (`seeds/company_crosswalk.csv`) mapping top CFPB `company_name` values to canonical names, company categories, and FDIC certificate numbers where applicable. Scope: top ~50 companies ≈ 85% of complaint volume. Long tail stays uncategorized.
+
+**FDIC `top_holder` is the right join grain** — confirmed via exploration. The `top_holder` column (parent holding company name) maps to CFPB's parent-corp naming convention much better than `institution_name`. Populated for ~94% of top-50-by-assets institutions.
+
+`top_holder` normalization quirks that the intermediate model (`int_fdic_banks_normalized`, Phase 3) must handle:
+- `&` without surrounding spaces: `JPMORGAN CHASE&CO`
+- `BCORP` vs `BANCORP` abbreviation variants
+- Trailing `THE`: `BANK OF NY MELLON CORP THE`
+- Abbreviated words: `FINL` (financial), `BK OF COM` (bank of commerce)
+
 ---
 
 ## `product` and `submitted_via` — accepted_values unverified
@@ -150,3 +182,42 @@ The `accepted_values` tests on `product` and `submitted_via` use `severity: warn
 marked TODO in `_models.yml`. The value lists were written from general knowledge of CFPB
 taxonomy and have not been verified against `SELECT DISTINCT product FROM raw.cfpb_complaints`.
 Run that query before promoting either test to `severity: error`.
+
+---
+
+## `product` taxonomy normalization
+
+CFPB renamed several product categories over time. Raw `product` has 18 distinct values but only ~10 analytical categories — 8 are legacy names that were consolidated into current labels. A naive `GROUP BY product` double-counts these categories across eras.
+
+`product_normalized` and `subproduct_normalized` in `stg_cfpb_complaints` resolve this. Raw `product` and `subproduct` are preserved for auditability.
+
+**Legacy product → normalized product:**
+
+| Legacy `product` | Normalized to |
+|---|---|
+| Bank account or service | Checking or savings account |
+| Consumer Loan *(vehicle subproducts)* | Vehicle loan or lease |
+| Consumer Loan *(other subproducts)* | Payday loan, title loan, or personal loan |
+| Credit card | Credit card or prepaid card |
+| Credit reporting | Credit reporting, credit repair services, or other personal consumer reports |
+| Money transfers | Money transfer, virtual currency, or money service |
+| Payday loan | Payday loan, title loan, or personal loan |
+| Prepaid card | Credit card or prepaid card |
+| Virtual currency | Money transfer, virtual currency, or money service |
+
+**`Debt collection` subproduct normalization:** CFPB added a "debt" suffix to subproduct labels in newer taxonomy. Legacy labels normalized: `Credit card` → `Credit card debt`, `Medical` → `Medical debt`, `Auto` → `Auto debt`, `Mortgage` → `Mortgage debt`, `Federal student loan` → `Federal student loan debt`, `Non-federal student loan` → `Private student loan debt`, `Other (i.e. phone, health club, etc.)` → `Other debt`.
+
+**Unrecognized values pass through unchanged** — if CFPB adds future categories they will appear as new rows in `dim_product` without breaking the model.
+
+---
+
+## FDIC analytical opportunities
+
+The following analyses are possible once the FDIC bank dim (Phase 3) is built. All metrics apply only to the bank-category subset of complaints; gate on `crosswalk.category = 'bank'` and document the scope in the mart.
+
+- **Complaints per $B assets by bank** — normalizes complaint volume for fair size comparison
+- **CFPB-supervised vs non-supervised banks** — volume and resolution-rate delta; uses `cfpb_supervisory_flag`
+- **Specialization × issue type** — `credit_card_institution` × `product_normalized` to test whether card-focused banks drive disproportionate card complaints
+- **Bank-HQ state vs complaint state** — mismatch as a customer-reach proxy
+- **ROA decile × complaint rate** — stressed-bank hypothesis (do lower-profitability banks generate more complaints?)
+- **ML handoff feature table** — per-bank `{total_assets, roa, offices_count, established_date, primary_specialization, cfpb_supervisory_flag}` → target `complaint_rate` or `timely_response_rate`. Clean "AE delivers features to DS" portfolio artifact.
