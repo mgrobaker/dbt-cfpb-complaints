@@ -18,15 +18,19 @@ models:
         tests:
           - not_null
       - name: date_sent_to_company
-        description: Date CFPB forwarded the complaint to the named company.
+        description: >
+          Date CFPB forwarded the complaint to the named company. 7,036 rows (~0.2%) have
+          date_sent_to_company < date_received by exactly 1 day, all between 2012-01-22 and
+          2014-04-26. Systematic intake-system artifact (timezone/batch-processing clock
+          issue); rows are kept and assert_complaint_dates_ordered runs at severity: warn.
         tests:
           - not_null
 
       - name: product
         description: >
-          Top-level product taxonomy (18 distinct values).
-          TODO: verify accepted_values list against `SELECT DISTINCT product FROM raw.cfpb_complaints`
-          before promoting severity to error.
+          Top-level product taxonomy (18 distinct values). accepted_values at severity: warn
+          — values list written from general CFPB taxonomy knowledge, not verified against
+          actual data. Promote to severity: error after running SELECT DISTINCT product.
         tests:
           - not_null
           - accepted_values:
@@ -64,6 +68,10 @@ models:
           virtual currency, or money service; Payday loan → Payday loan, title loan, or personal
           loan; Prepaid card → Credit card or prepaid card; Virtual currency → Money transfer,
           virtual currency, or money service. Unrecognized values pass through unchanged.
+          not_null at severity: error — product is never null and the CASE has an ELSE branch,
+          so a null here means broken logic.
+        tests:
+          - not_null
       - name: subproduct_normalized
         description: >
           subproduct with legacy labels merged into current equivalents, consistent with
@@ -97,6 +105,8 @@ models:
           to ISO code 'UM'. Any other long-form value remapped to 'not-provided' as a
           safety catch. Includes territories (PR, VI, GU, AS, MP, UM), military APO
           codes (AA, AE, AP), and freely associated states (FM, MH, PW).
+          accepted_values at severity: error — values list confirmed against actual data
+          (63 distinct raw values, all accounted for in the CASE expression or safety catch).
         tests:
           - not_null
           - accepted_values:
@@ -166,6 +176,8 @@ models:
                   - "WY"
                   - "UM"
                   - "not-provided"
+              config:
+                severity: error
       - name: zip_code
         description: 5-char ZIP; may be masked (XXXXX) for privacy.
 
@@ -173,8 +185,9 @@ models:
         description: Special-population tag (Older American, Servicemember). 89% null.
       - name: submitted_via
         description: >
-          Intake channel (Web, Phone, Referral, etc.).
-          TODO: verify accepted_values list against `SELECT DISTINCT submitted_via FROM raw.cfpb_complaints`.
+          Intake channel (Web, Phone, Referral, etc.). accepted_values at severity: warn
+          — values list unverified. Promote to severity: error after running
+          SELECT DISTINCT submitted_via.
         tests:
           - not_null
           - accepted_values:
@@ -190,23 +203,51 @@ models:
               config:
                 severity: warn
       - name: company_response_to_consumer
-        description: Resolution category returned by the company.
+        description: >
+          Resolution category returned by the company. 4 null rows mapped to
+          'Untimely response' (assumption: no response filed = untimely).
+          not_null at severity: error — nulls coalesced away in staging.
+        tests:
+          - not_null
       - name: company_public_response
-        description: Optional public statement from the company. 56% null.
+        description: >
+          Optional public statement from the company. Null (56%) mapped to 'Unknown'.
+          The verbose label "Company has responded to the consumer and the CFPB and
+          chooses not to provide a public response" (1.3M rows) is collapsed to
+          "Company chooses not to provide a public response" — the consumer response
+          detail belongs in company_response_to_consumer, not here.
+          not_null at severity: error — nulls mapped to 'Unknown' in staging.
+        tests:
+          - not_null
       - name: consumer_consent_provided
-        description: Whether the consumer consented to narrative publication.
+        description: >
+          Whether the consumer consented to narrative publication. Null (25%) mapped
+          to 'Unknown'. Values after staging: Consent provided, Consent not provided,
+          Consent withdrawn, Other, Unknown.
+          not_null at severity: error — nulls coalesced away in staging.
+        tests:
+          - not_null
 
       - name: timely_response
         description: Whether the company responded within CFPB's SLA.
         tests:
           - not_null
       - name: consumer_disputed
-        description: Legacy field; CFPB stopped collecting ~2017. 78% null.
+        description: >
+          Legacy field. CFPB stopped collecting mid-2017: 100% fill through 2016,
+          29.8% in 2017, 0% from 2018 onward — 78% null overall. Gate any
+          dispute-rate metric on date_received < '2017-01-01' to avoid comparing
+          full-coverage years against empty ones.
       - name: has_narrative
         description: >
-          Derived at raw materialize time. TRUE if the source row had a
-          non-empty `consumer_complaint_narrative`; the text itself was
-          dropped to shrink the table.
+          Derived at raw materialization: TRUE if the source row had a non-empty
+          consumer_complaint_narrative (text dropped to reduce table size 2.31 GB →
+          768 MB). Zero before June 2015 — CFPB launched the opt-in narrative feature
+          then. The 2015 rate (32.5%) reflects a partial year; treat 2016 as the
+          effective floor for narrative analysis.
+          not_null at severity: error — derived boolean, always TRUE or FALSE.
+        tests:
+          - not_null
 
   - name: stg_fdic_banks
     description: >

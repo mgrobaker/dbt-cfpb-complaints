@@ -24,7 +24,22 @@ See [SETUP.md](./SETUP.md) for local installation and credentials.
 
 ## Structure
 
-_To be filled in as the project develops._
+```
+models/
+  staging/        # stg_* — source-faithful cleaning, type casting, light derivations
+  intermediate/   # int_* — multi-source joins and business logic (Phase 3+)
+  marts/          # dim_* and fct_* — dimensional model for analytics
+exploration/
+  cfpb/           # Investigation queries: profile/, companies/, setup/
+  fdic/           # Investigation queries by source
+  README.md       # Query tracker: status and outcomes for each file
+docs/
+  schema.md       # Authoritative column reference for raw tables
+seeds/            # company_crosswalk.csv (Phase 2) — hand-mapped CFPB→FDIC names
+tests/            # Singular tests (assert_*)
+```
+
+**Model naming**: `stg_<source>_<entity>`, `int_<description>`, `dim_<entity>`, `fct_<entity>`.
 
 ## Live Dashboard
 

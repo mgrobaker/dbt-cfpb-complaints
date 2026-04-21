@@ -7,15 +7,12 @@ select
     date_received,
     date_sent_to_company,
 
-    date_received                                                           as date_day_received,
-    cast(
-        farm_fingerprint(concat(product_normalized, '|', coalesce(subproduct_normalized, '')))
-        as string
-    )                                                                       as product_sk,
-    cast(
-        farm_fingerprint(concat(issue, '|', coalesce(subissue, '')))
-        as string
-    )                                                                       as issue_sk,
+    product,
+    subproduct,
+    product_normalized,
+    subproduct_normalized,
+    issue,
+    subissue,
 
     company_name,
     company_name_normalized,

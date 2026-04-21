@@ -1,5 +1,5 @@
 -- Data quality anomalies: date ordering violations, tags field, zip validity.
--- Findings documented in docs/data-quality-notes.md.
+-- Findings documented in staging/_models.yml column descriptions and exploration/README.md.
 
 -- ================================================================
 -- Date ordering violations: date_sent_to_company < date_received
@@ -29,6 +29,23 @@ WHERE date_sent_to_company < date_received
 GROUP BY year, company_name
 ORDER BY violations DESC
 LIMIT 30;
+
+-- ================================================================
+-- date_sent_to_company null check by response status
+-- Confirms whether the not_null test on date_sent_to_company is safe.
+-- 'In progress' complaints (103K rows) may not have been forwarded to the company yet —
+-- if so, date_sent_to_company would be null and the test would fail.
+-- Expected: zero nulls across all response values.
+-- ================================================================
+SELECT
+  COALESCE(company_response_to_consumer, '(null)') AS response,
+  COUNT(*)                                          AS n_total,
+  COUNTIF(date_sent_to_company IS NULL)             AS n_null_sent_date
+FROM `dbt-portfolio-493318.raw.cfpb_complaints`
+GROUP BY response
+HAVING COUNTIF(date_sent_to_company IS NULL) > 0
+    OR response = 'In progress'
+ORDER BY n_null_sent_date DESC;
 
 -- ================================================================
 -- Tags: distinct values and co-occurrence

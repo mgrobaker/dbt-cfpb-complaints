@@ -1,5 +1,7 @@
--- Verify product normalization in stg_cfpb_complaints / dim_product.
--- Run after dbt run on stg_cfpb_complaints, dim_product, fct_complaints.
+-- Verify product normalization in stg_cfpb_complaints / fct_complaints.
+-- NOTE: dim_product removed; normalization now via product_mapping + subproduct_mapping seeds.
+-- Queries 1 and 5 reference dbt_dev.dim_product and are stale — update to query fct_complaints.
+-- Run after dbt run on stg_cfpb_complaints, fct_complaints.
 
 -- 1. Canonical product list post-normalization (should be ~10 distinct products, no legacy names)
 select product, count(*) as subproduct_count
@@ -39,5 +41,8 @@ where product = 'Consumer Loan'
 group by 1, 2
 order by 1, 2;
 
--- 5. dim_product row count sanity — 66 rows expected post-normalization
-select count(*) as total_product_rows from dbt_dev.dim_product;
+-- 5. STALE: was a dim_product row count check. Now verify distinct normalized products on fct_complaints.
+select product_normalized, count(distinct subproduct_normalized) as subproduct_count
+from dbt_dev.fct_complaints
+group by 1
+order by 1;

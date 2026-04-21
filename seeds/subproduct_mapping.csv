@@ -1,0 +1,25 @@
+raw_product,raw_subproduct,subproduct_normalized
+Bank account or service,(CD) Certificate of deposit,CD (Certificate of Deposit)
+Bank account or service,Other bank product/service,Other banking product or service
+Bank account or service,Cashing a check without an account,Other banking product or service
+Consumer Loan,Vehicle loan,Loan
+Consumer Loan,Vehicle lease,Lease
+Credit card,,General-purpose credit card or charge card
+Credit reporting,,Credit reporting
+Payday loan,,Payday loan
+Prepaid card,General purpose card,General-purpose prepaid card
+Prepaid card,Mobile wallet,General-purpose prepaid card
+Prepaid card,Gift or merchant card,Gift card
+Prepaid card,Government benefit payment card,Government benefit card
+Prepaid card,Electronic Benefit Transfer / EBT card,Government benefit card
+Prepaid card,ID prepaid card,General-purpose prepaid card
+Prepaid card,Other special purpose card,General-purpose prepaid card
+Prepaid card,Transit card,General-purpose prepaid card
+Debt collection,Credit card,Credit card debt
+Debt collection,Medical,Medical debt
+Debt collection,Payday loan,Payday loan debt
+Debt collection,Mortgage,Mortgage debt
+Debt collection,Auto,Auto debt
+Debt collection,Federal student loan,Federal student loan debt
+Debt collection,Non-federal student loan,Private student loan debt
+"Debt collection","Other (i.e. phone, health club, etc.)",Other debt

@@ -12,46 +12,35 @@ models:
           - not_null
           - unique
 
-  - name: dim_product
-    description: Distinct product/subproduct combinations. One row per unique pair.
-    columns:
-      - name: product_sk
-        description: >
-          Surrogate key: CAST(FARM_FINGERPRINT(product || '|' || COALESCE(subproduct, '')) AS STRING).
-          Same expression used in fct_complaints — no physical FK enforced in BigQuery.
-        tests:
-          - not_null
-          - unique
-
-  - name: dim_issue
-    description: Distinct issue/subissue combinations. One row per unique pair.
-    columns:
-      - name: issue_sk
-        description: >
-          Surrogate key: CAST(FARM_FINGERPRINT(issue || '|' || COALESCE(subissue, '')) AS STRING).
-          Same expression used in fct_complaints — no physical FK enforced in BigQuery.
-        tests:
-          - not_null
-          - unique
-
   - name: fct_complaints
     description: >
-      One row per CFPB complaint. Carries dim surrogate keys as plain columns;
-      joins to dim_date, dim_product, dim_issue happen at query time.
-      company_sk placeholder for Phase 2 crosswalk enrichment.
+      One row per CFPB complaint (2012–2022, ~3.4M rows). Product and issue
+      columns carried directly — no dim join required. company_name_normalized
+      is the pre-crosswalk grouping key; company_sk enrichment deferred to Phase 2.
     columns:
       - name: complaint_id
         description: Natural primary key from CFPB.
         tests:
           - not_null
           - unique
-      - name: date_day_received
-        description: FK to dim_date.date_day — equals date_received.
-      - name: product_sk
-        description: FK to dim_product.product_sk.
-      - name: issue_sk
-        description: FK to dim_issue.issue_sk.
+      - name: product
+        description: Raw product label from CFPB.
+      - name: subproduct
+        description: Raw subproduct label from CFPB. Nullable.
+      - name: product_normalized
+        description: >
+          Legacy CFPB product labels mapped to current taxonomy via product_mapping seed.
+          Consumer Loan split into Vehicle loan or lease vs. Payday loan, title loan, or personal loan
+          based on subproduct.
+      - name: subproduct_normalized
+        description: >
+          Legacy subproduct labels mapped to current taxonomy via subproduct_mapping seed.
+          Null-subproduct cases for legacy single-category products filled with best-fit current label.
+      - name: issue
+        description: Issue category. 165 distinct values.
+      - name: subissue
+        description: Subissue. Nullable; 20.2% null rate.
       - name: company_name_normalized
         description: >
           Uppercased, whitespace-collapsed, trailing-punct-stripped form of
-          company_name. Passed through from staging for pre-crosswalk grouping.
+          company_name. Pre-crosswalk grouping handle.
