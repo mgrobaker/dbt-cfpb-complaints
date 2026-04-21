@@ -179,10 +179,28 @@ models:
               config:
                 severity: error
       - name: zip_code
-        description: 5-char ZIP; may be masked (XXXXX) for privacy.
+        description: >
+          ZIP code as published by CFPB. Most complaints have a standard 5-digit ZIP.
+          Exception: complaints where the consumer consented to narrative publication AND
+          lives in a ZCTA with fewer than 20,000 people receive a 3-digit ZIP (CFPB
+          privacy rule; Release 10, June 2015). Staging incorrectly LPADs these 3-digit
+          values to 5-digit (e.g., raw "17.0" → "00017" instead of "017") — they are
+          numeric and pass zip_code_is_valid, so the flag does NOT catch them. See
+          docs/data-quality-notes.md § ZIP Code for impact and fix approach.
+          No XXXXX masked values observed in this dataset.
 
       - name: tags
-        description: Special-population tag (Older American, Servicemember). 89% null.
+        description: >
+          Special-population tag. 89% null. Three distinct non-null values:
+          "Servicemember", "Older American", "Older American, Servicemember" (always
+          Older American–first). Parse with LIKE '%Servicemember%' and
+          LIKE '%Older American%' to handle the combined value correctly.
+          CFPB definitions: Older American = submitter reports consumer age ≥ 62.
+          Servicemember = active duty, National Guard, Reservist, Veteran, or retiree —
+          AND spouses/dependents of servicemembers.
+          Coverage: field added February 2016 (CFPB Release 11). Pre-2016 complaints
+          (2012–2015 in our dataset) are structurally null — not a data quality issue.
+          Use 2016 as the effective floor for any tags-based analysis.
       - name: submitted_via
         description: >
           Intake channel (Web, Phone, Referral, etc.). accepted_values at severity: warn
@@ -211,20 +229,29 @@ models:
           - not_null
       - name: company_public_response
         description: >
-          Optional public statement from the company. Null (56%) mapped to 'Unknown'.
-          The verbose label "Company has responded to the consumer and the CFPB and
-          chooses not to provide a public response" (1.3M rows) is collapsed to
-          "Company chooses not to provide a public response" — the consumer response
-          detail belongs in company_response_to_consumer, not here.
-          not_null at severity: error — nulls mapped to 'Unknown' in staging.
+          Optional public statement from the company. Null (56%) mapped to 'not-provided'
+          — sentinel chosen over NULL so GROUP BY includes a visible bucket without
+          special COALESCE handling downstream. The verbose label "Company has responded
+          to the consumer and the CFPB and chooses not to provide a public response"
+          (1.3M rows) is collapsed to "Company chooses not to provide a public response"
+          — the consumer response detail belongs in company_response_to_consumer, not here.
+          not_null at severity: error — nulls mapped to 'not-provided' in staging.
         tests:
           - not_null
       - name: consumer_consent_provided
         description: >
           Whether the consumer consented to narrative publication. Null (25%) mapped
-          to 'Unknown'. Values after staging: Consent provided, Consent not provided,
-          Consent withdrawn, Other, Unknown.
+          to 'not-provided' — same sentinel pattern as company_public_response; keeps
+          GROUP BY clean without downstream COALESCE. Values after staging: Consent
+          provided, Consent not provided, Consent withdrawn, Other, not-provided.
           not_null at severity: error — nulls coalesced away in staging.
+          Population timing: "Consent provided" and "Consent not provided" populate
+          60 days after the complaint is sent to the company OR after the company files
+          an optional public response, whichever comes first — explains why recent
+          complaints have more nulls (window not yet elapsed at extract time). "N/A"
+          populates immediately for pre-March 2015 complaints or cases where the
+          narrative option was unavailable. "Other" means the complaint doesn't meet
+          criteria for narrative publication.
         tests:
           - not_null
 

@@ -40,13 +40,18 @@ renamed as (
             when length(trim(state)) > 2                                          then 'not-provided'
             else upper(trim(state))
         end                                  as state,
-        -- Raw zip_code is float-formatted ('30349.0') due to BigQuery CSV import.
-        -- Strip .0 suffix, LPAD to 5 digits to restore leading zeros (e.g. '02301').
-        -- SAFE_CAST: non-numeric values (XXXXX, etc.) return NULL → fall back to trimmed raw
-        -- so zip_code_is_valid can still flag them rather than silently NULLing them out.
+        -- Raw zip_code is float-formatted ('30349.0') — BigQuery CSV import artifact.
+        -- Also strip trailing '-': artifact of users beginning to type zip+4 (e.g. '3008-').
+        -- SAFE_CAST: non-numeric values pass through via COALESCE so zip_code_is_valid
+        -- can flag them; NULL source stays NULL.
         coalesce(
             lpad(
-                cast(safe_cast(regexp_replace(trim(zip_code), r'\.0$', '') as int64) as string),
+                cast(safe_cast(
+                    regexp_replace(
+                        regexp_replace(trim(zip_code), r'\.0$', ''),
+                        r'-$', ''
+                    )
+                as int64) as string),
                 5, '0'
             ),
             trim(zip_code)
@@ -66,11 +71,11 @@ renamed as (
             when trim(company_public_response) = 'Company has responded to the consumer and the CFPB and chooses not to provide a public response'
                 then 'Company chooses not to provide a public response'
             when company_public_response is null
-                then 'Unknown'
+                then 'not-provided'
             else trim(company_public_response)
         end                                  as company_public_response,
 
-        coalesce(trim(consumer_consent_provided), 'Unknown')
+        coalesce(trim(consumer_consent_provided), 'not-provided')
                                              as consumer_consent_provided,
 
         timely_response,
@@ -93,7 +98,9 @@ normalized as (
             r.product
         )                                    as product_normalized,
         coalesce(sm.subproduct_normalized, r.subproduct)
-                                             as subproduct_normalized
+                                             as subproduct_normalized,
+        coalesce(regexp_contains(r.zip_code, r'^\d{5}$'), false)
+                                             as zip_code_is_valid
     from renamed r
     left join {{ ref('product_mapping') }} pm
         on r.product = pm.raw_product

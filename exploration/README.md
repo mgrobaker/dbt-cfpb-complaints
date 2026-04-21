@@ -6,6 +6,17 @@ Status of each exploration query. Update as you run things.
 
 ---
 
+## Current Priority
+
+Run in this order before building the crosswalk:
+
+1. **Narrative rate query** (`products.sql`) — `has_narrative` rate by product × year (MetricFlow `narrative_rate` framing)
+2. **`fdic/exploration.sql` query 5c** — naive uppercase join test (DECISIONS.md talking point)
+
+Queries without a downstream build decision are deprioritized. Exploration is scoped to questions that shape model decisions, not exhaustive coverage.
+
+---
+
 ## cfpb/companies/
 
 ### quality.sql
@@ -35,13 +46,13 @@ Status of each exploration query. Update as you run things.
 ## cfpb/profile/
 
 ### anomalies.sql
-**Status**: partial
+**Status**: ✓
 
 - **Outcome**: Date ordering violations: 7,036 rows (~0.2%) where `date_sent_to_company < date_received`. All exactly 1 day early, all 2012-01-22 to 2014-04-26. Proportionally spread across all major filers — systematic intake-system artifact, not a data error.
   - **Action**: → `tests/assert_complaint_dates_ordered.sql` at `severity: warn`.
 
-- **Outcome**: Zip code validity — *query updated to run on staging (not raw)*. Raw zip_code is float-formatted (`30349.0`) — BigQuery CSV import artifact. Fixed in staging: `SAFE_CAST` + `LPAD` to produce clean 5-digit strings (`02301`). Pattern summary + drill-down queries in `anomalies.sql` ready to run on `dbt_dev.stg_cfpb_complaints` after next `dbt run`. Informs `zip_code_is_valid` staging flag.
-  - **Action**: → Run zip queries on staging, then add `zip_code_is_valid` flag to `stg_cfpb_complaints.sql`.
+- **Outcome**: Zip code validity — raw zip_code is float-formatted (`30349.0`) — BigQuery CSV import artifact. After staging cleanup (`SAFE_CAST` + `LPAD` + trailing `-` strip): vast majority `valid_5digit`. 48 complaints (45 distinct zip strings) in 'other' — all genuinely corrupted (mixed punctuation, embedded dashes, etc.). No masked `XXXXX` values in this dataset. `zip_code_is_valid` flag added to `stg_cfpb_complaints.sql`; NULL zip → `false`.
+  - **Action**: → `zip_code_is_valid` in `staging/stg_cfpb_complaints.sql` ✓ done.
 
 ---
 
@@ -94,19 +105,12 @@ Status of each exploration query. Update as you run things.
 
 - **Outcome**: Narrative rate by product × year (post-June 2015 only) — *not yet run*
 
-**➡ NEXT SESSION: start here** — run in this order, then build the crosswalk:
-
-1. **`anomalies.sql`** — tags co-occurrence + zip validity (blocks `tags_is_servicemember`, `tags_is_older_american`, `zip_code_is_valid` staging flags)
-2. **`temporal.sql`** — resolution time distribution (blocks `days_to_resolution` clamping logic and `_models.yml` documentation)
-3. **Narrative rate query below** — `has_narrative` rate by product × year (interview color; informs MetricFlow `narrative_rate` metric framing)
-4. **`fdic/exploration.sql` query 5c** — naive uppercase join test (DECISIONS.md talking point for crosswalk justification)
-
-Queries without a downstream build decision have been deprioritized. Exploration is scoped to questions that shape model decisions, not exhaustive coverage.
+*See Current Priority section above for run order.*
 
 ---
 
 ### temporal.sql
-**Status**: partial
+**Status**: ✓
 
 - **Outcome**: 2011 stub, 2023 partial. `consumer_disputed` 100% fill 2012–2016, drops to 0% by 2018 (CFPB policy change mid-2017). `has_narrative` 0% before mid-2015. 2020 +60% YoY (COVID). 2022 is peak year (800K).
   - **Action**: → staging date filter `staging/stg_cfpb_complaints.sql:14-17` (drops 2011 + 2023). Caveats in `staging/_models.yml` column descriptions.
@@ -127,7 +131,8 @@ Queries without a downstream build decision have been deprioritized. Exploration
 | 2022 | 800,416 | 3,298 | 0% | 42.1% | 57.3% |
 | 2023 | 244,675 | 1,926 | 0% | 16.6% | 30.3% |
 
-- **Outcome**: Resolution time distribution (percentile breakdown by era) — *not yet run*. Informs `days_to_resolution` derived field in `fct_complaints`.
+- **Outcome**: Resolution time distribution by era. Same-day forwarding (0 days) dominates and increases over time: pre_2015 33% zero (p50=1d), 2015_2019 75% zero (p50=0, p90=5d), 2020_plus 92% zero (p50=0, p90=0, p99=20d). Zeros are real — CFPB progressively automated same-day routing, not an artifact. Negatives (-1 day, 7,036 rows) are pre_2015 only — the known intake-system artifact. No negative rows in 2015+.
+  - **Action**: → `days_to_company` in `fct_complaints` (renamed from `days_to_resolution` — measures receipt→forwarding, not receipt→resolved). Clamp negatives with `GREATEST(..., 0)`. Keep zeros. Column name change signals the metric is about CFPB routing speed, not company resolution time.
 
 ---
 
@@ -161,7 +166,7 @@ Queries without a downstream build decision have been deprioritized. Exploration
 
 ---
 
-## Company taxonomy & FDIC join strategy
+## Reference: Company Taxonomy & FDIC Join Strategy
 
 ### Non-bank companies in top 50
 
@@ -211,10 +216,18 @@ All metrics gate on `crosswalk.category = 'bank'`.
 
 ---
 
-## Top level
+## validation/
+
+### staging_validation.sql
+**Status**: —
+
+- **Outcome**: zip_code_is_valid distribution + not-provided sentinel checks — *not yet run*. Confirms staging zip cleanup and NULL→'not-provided' mappings applied correctly.
+  - **Action**: → Run after any `dbt run` that touches `stg_cfpb_complaints`.
+
+---
 
 ### verify_product_normalization.sql
-**Status**: —
+**Status**: — (blocked — run after next `dbt run`)
 
 - **Outcome**: Post-`dbt run` verification: confirms no legacy product names remain in `fct_complaints`, `Consumer Loan` fully split into two new categories, Debt collection subproducts normalized. Queries 1 and 5 are stale (referenced old `dim_product`; updated to query `fct_complaints` directly).
   - **Action**: Run in DBCode after `dbt run` on `stg_cfpb_complaints`, `fct_complaints`

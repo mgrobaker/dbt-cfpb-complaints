@@ -1,4 +1,5 @@
--- Data quality anomalies: date ordering violations, tags field, zip validity.
+-- Data quality anomalies: date ordering violations, zip validity.
+-- Staging validation queries appended at bottom (zip_code_is_valid flag, not-provided sentinels).
 -- Findings documented in staging/_models.yml column descriptions and exploration/README.md.
 
 -- ================================================================
