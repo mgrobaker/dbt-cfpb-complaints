@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: int_complaints_with_company
+    description: >
+      stg_cfpb_complaints left-joined to the company crosswalk on
+      company_name_normalized. Adds canonical_name, category, and is_crosswalked
+      to every complaint row. Grain: one row per complaint — the left join
+      preserves all staging rows and raw_company_name is unique in
+      stg_company_crosswalk, so no fan-out is possible.
+      Reused by fct_complaints and any future company-level mart.
+    columns:
+      - name: complaint_id
+        description: Natural primary key — carried from stg_cfpb_complaints.
+        tests:
+          - not_null
+          - unique
+
+      - name: canonical_name
+        description: >
+          Human-readable company name from the crosswalk (e.g. "JPMorgan Chase").
+          Null for complaints whose company_name_normalized has no crosswalk entry
+          (~23% of volume by design — long-tail companies are uncategorized).
+      - name: category
+        description: >
+          Company type from the crosswalk: bank, credit_bureau, debt_collector,
+          mortgage_servicer, student_loan_servicer, fintech, or other.
+          Null for uncrosswalked complaints.
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - bank
+                  - credit_bureau
+                  - debt_collector
+                  - mortgage_servicer
+                  - student_loan_servicer
+                  - fintech
+                  - other
+              config:
+                where: "is_crosswalked = true"
+      - name: company_parent_as_of
+        description: >
+          Effective date of entity change for rebranded companies (SunTrust,
+          BB&T, Alliance Data). Null for current or historically-stable entities.
+      - name: is_crosswalked
+        description: >
+          TRUE if the complaint's company_name_normalized matched a crosswalk entry.
+          FALSE for long-tail companies not in the seed. Crosswalk covers ~77% of
+          complaint volume (top 3 credit bureaus + top 30 others).
+        tests:
+          - not_null
