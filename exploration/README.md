@@ -40,9 +40,16 @@ Status of each exploration query. Update as you run things.
 - **Outcome**: Date ordering violations: 7,036 rows (~0.2%) where `date_sent_to_company < date_received`. All exactly 1 day early, all 2012-01-22 to 2014-04-26. Proportionally spread across all major filers — systematic intake-system artifact, not a data error.
   - **Action**: → `tests/assert_complaint_dates_ordered.sql` at `severity: warn`.
 
-- **Outcome**: Tags field co-occurrence (Servicemember, Older American, both) — *not yet run*. Informs `tags_is_servicemember` / `tags_is_older_american` staging flags.
+- **Outcome**: Zip code validity — *query updated to run on staging (not raw)*. Raw zip_code is float-formatted (`30349.0`) — BigQuery CSV import artifact. Fixed in staging: `SAFE_CAST` + `LPAD` to produce clean 5-digit strings (`02301`). Pattern summary + drill-down queries in `anomalies.sql` ready to run on `dbt_dev.stg_cfpb_complaints` after next `dbt run`. Informs `zip_code_is_valid` staging flag.
+  - **Action**: → Run zip queries on staging, then add `zip_code_is_valid` flag to `stg_cfpb_complaints.sql`.
 
-- **Outcome**: Zip code validity — masked XXXXX patterns, 4-digit values, nulls — *not yet run*. Informs `zip_code_is_valid` staging flag.
+---
+
+### tags.sql
+**Status**: ✓
+
+- **Outcome**: 3 distinct non-null values confirmed: `'Servicemember'` (216,614), `'Older American'` (133,725), `'Older American, Servicemember'` (31,874). Combined tag is always Older American–first. Total tagged rows: ~382K (~11.1% of dataset). `LIKE '%Servicemember%'` and `LIKE '%Older American%'` both correctly parse all 3 values.
+  - **Action**: → `tags_is_servicemember` and `tags_is_older_american` flags in `staging/stg_cfpb_complaints.sql` confirmed. No edge cases.
 
 ---
 

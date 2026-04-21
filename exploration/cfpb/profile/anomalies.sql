@@ -48,32 +48,40 @@ HAVING COUNTIF(date_sent_to_company IS NULL) > 0
 ORDER BY n_null_sent_date DESC;
 
 -- ================================================================
--- Tags: distinct values and co-occurrence
--- Confirms parse strategy for tags_is_servicemember / tags_is_older_american flags.
--- 88.9% null — field only populated for special populations.
+-- Zip code validity: pattern breakdown.
+-- Sets the staging rule for zip_code_is_valid flag.
+-- Tags query moved to cfpb/profile/tags.sql — not an anomaly.
 -- ================================================================
+
+-- Pattern summary — CASE avoids double-counting across categories.
+-- Run against staging (not raw) — raw zip_code is float-formatted (e.g. '30349.0'),
+-- a BigQuery CSV import artifact. Staging strips the .0 and LPADs to 5 digits.
+-- Querying staging gives the cleaned shape that the zip_code_is_valid flag should reflect.
 SELECT
-  tags,
-  COUNT(*) AS n,
-  COUNTIF(tags LIKE '%Servicemember%') AS n_servicemember,
-  COUNTIF(tags LIKE '%Older American%') AS n_older_american,
-  COUNTIF(tags LIKE '%Servicemember%' AND tags LIKE '%Older American%') AS n_both
-FROM `raw.cfpb_complaints`
-GROUP BY tags
+  CASE
+    WHEN zip_code IS NULL                                  THEN 'null'
+    WHEN zip_code = ''                                     THEN 'empty_string'
+    WHEN REGEXP_CONTAINS(zip_code, r'^\d{5}$')            THEN 'valid_5digit'
+    WHEN REGEXP_CONTAINS(zip_code, r'^\d{4}$')            THEN '4digit_leading_zero_dropped'
+    WHEN REGEXP_CONTAINS(zip_code, r'^[0-9X]{5}$')        THEN 'masked_5char'
+    WHEN REGEXP_CONTAINS(zip_code, r'^\d{5}-\d{4}$')      THEN 'zip_plus4_dash'
+    WHEN REGEXP_CONTAINS(zip_code, r'^\d{9}$')            THEN 'zip_plus4_nodash'
+    ELSE                                                        'other'
+  END    AS zip_pattern,
+  COUNT(*) AS n
+FROM `dbt-portfolio-493318.dbt_dev.stg_cfpb_complaints`
+GROUP BY zip_pattern
 ORDER BY n DESC;
 
--- ================================================================
--- Zip code validity: masked values (XXXXX), 4-digit, nulls, other patterns
--- Sets the staging rule for zip_code_is_valid flag.
--- ================================================================
+-- Drill into non-null, non-valid-5digit values on staging data.
 SELECT
-  COUNT(*) AS n_total,
-  COUNTIF(zip_code IS NULL) AS n_null,
-  COUNTIF(zip_code = '') AS n_empty,
-  COUNTIF(REGEXP_CONTAINS(zip_code, r'^\d{5}$')) AS n_valid_5digit,
-  COUNTIF(REGEXP_CONTAINS(zip_code, r'^\d{4}$')) AS n_4digit,
-  COUNTIF(REGEXP_CONTAINS(zip_code, r'X')) AS n_contains_x,
-  COUNTIF(zip_code = 'XXXXX') AS n_fully_masked,
-  COUNTIF(REGEXP_CONTAINS(zip_code, r'^\d{3}XX$')) AS n_partially_masked_3,
-  COUNTIF(NOT REGEXP_CONTAINS(zip_code, r'^[0-9X]{5}$') AND zip_code IS NOT NULL AND zip_code != '') AS n_other_weird
-FROM `raw.cfpb_complaints`;
+  zip_code,
+  LENGTH(zip_code) AS zip_len,
+  COUNT(*)         AS n
+FROM `dbt-portfolio-493318.dbt_dev.stg_cfpb_complaints`
+WHERE zip_code IS NOT NULL
+  AND zip_code != ''
+  AND NOT REGEXP_CONTAINS(zip_code, r'^\d{5}$')
+GROUP BY zip_code, zip_len
+ORDER BY n DESC
+LIMIT 100;

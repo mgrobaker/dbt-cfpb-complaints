@@ -40,7 +40,17 @@ renamed as (
             when length(trim(state)) > 2                                          then 'not-provided'
             else upper(trim(state))
         end                                  as state,
-        trim(zip_code)                       as zip_code,
+        -- Raw zip_code is float-formatted ('30349.0') due to BigQuery CSV import.
+        -- Strip .0 suffix, LPAD to 5 digits to restore leading zeros (e.g. '02301').
+        -- SAFE_CAST: non-numeric values (XXXXX, etc.) return NULL → fall back to trimmed raw
+        -- so zip_code_is_valid can still flag them rather than silently NULLing them out.
+        coalesce(
+            lpad(
+                cast(safe_cast(regexp_replace(trim(zip_code), r'\.0$', '') as int64) as string),
+                5, '0'
+            ),
+            trim(zip_code)
+        )                                    as zip_code,
 
         trim(tags)                           as tags,
         trim(submitted_via)                  as submitted_via,
