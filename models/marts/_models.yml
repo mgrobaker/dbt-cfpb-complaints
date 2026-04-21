@@ -44,3 +44,43 @@ models:
         description: >
           Uppercased, whitespace-collapsed, trailing-punct-stripped form of
           company_name. Pre-crosswalk grouping handle.
+
+      - name: zip_code_is_valid
+        description: >
+          TRUE if zip_code matches r'^\d{5}$' after staging cleanup. FALSE for
+          null zips, non-numeric values, and the 48 known corrupted zips. Note:
+          CFPB intentional 3-digit privacy zips (low-ZCTA-population + narrative
+          consent) incorrectly pass as TRUE after staging LPAD — see
+          docs/data-quality-notes.md § ZIP Code.
+
+      - name: tags_is_servicemember
+        description: >
+          TRUE if the complaint's tags field includes 'Servicemember'. Covers
+          active duty, National Guard, Reservists, Veterans, retirees, and
+          their spouses/dependents. FALSE for pre-Feb 2016 complaints
+          (structurally null — CFPB added tags in Release 11) and for complaints
+          with no servicemember tag. Gate analysis on date_received >= '2016-02-01'.
+      - name: tags_is_older_american
+        description: >
+          TRUE if the complaint's tags field includes 'Older American' (age ≥ 62
+          as reported by the submitter). FALSE for pre-Feb 2016 and untagged
+          complaints. Same coverage floor as tags_is_servicemember.
+
+      - name: is_dispute_era
+        description: >
+          TRUE for complaints received before 2017-04-24, the exact date CFPB
+          discontinued the consumer_disputed field (Release 13). Gate any
+          dispute-rate metric on this flag to avoid comparing full-coverage years
+          against the post-discontinuation zero-fill period.
+      - name: is_narrative_era
+        description: >
+          TRUE for complaints received on or after 2015-06-01, when CFPB launched
+          the opt-in narrative feature. has_narrative is structurally FALSE before
+          this date. Use as the floor for any narrative-rate metric.
+      - name: days_to_company
+        description: >
+          Calendar days from date_received to date_sent_to_company, clamped to 0
+          via GREATEST. Measures CFPB routing speed, not company resolution time.
+          7,036 pre-2015 rows had a -1 day artifact (intake system clock issue);
+          GREATEST clamps these to 0. Zero dominates 2015+ (75–92%) — reflects
+          CFPB progressive automation of same-day forwarding, not a data artifact.

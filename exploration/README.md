@@ -8,10 +8,12 @@ Status of each exploration query. Update as you run things.
 
 ## Current Priority
 
-Run in this order before building the crosswalk:
+Phase 2 crosswalk build is underway. Run FDIC queries first — they validate the crosswalk seed before `int_complaints_with_company` is built.
 
-1. **Narrative rate query** (`products.sql`) — `has_narrative` rate by product × year (MetricFlow `narrative_rate` framing)
-2. **`fdic/exploration.sql` query 5c** — naive uppercase join test (DECISIONS.md talking point)
+1. **`fdic/exploration.sql` 5b** — FDIC top holders by combined assets; confirms crosswalk `fdic_top_holder` values exist in FDIC data
+2. **`fdic/exploration.sql` 5e** — suffix-strip fuzzy match; shows which crosswalk entries resolve cleanly, which need 5f investigation
+3. **`fdic/exploration.sql` 5c** — naive uppercase join baseline (DECISIONS.md talking point: "naive join hits X%; that's why the crosswalk exists")
+4. **Narrative rate query** (`products.sql`) — `has_narrative` rate by product × year; doesn't block any build decision, worth running for MetricFlow/interview color
 
 Queries without a downstream build decision are deprioritized. Exploration is scoped to questions that shape model decisions, not exhaustive coverage.
 
@@ -59,8 +61,8 @@ Queries without a downstream build decision are deprioritized. Exploration is sc
 ### tags.sql
 **Status**: ✓
 
-- **Outcome**: 3 distinct non-null values confirmed: `'Servicemember'` (216,614), `'Older American'` (133,725), `'Older American, Servicemember'` (31,874). Combined tag is always Older American–first. Total tagged rows: ~382K (~11.1% of dataset). `LIKE '%Servicemember%'` and `LIKE '%Older American%'` both correctly parse all 3 values.
-  - **Action**: → `tags_is_servicemember` and `tags_is_older_american` flags in `staging/stg_cfpb_complaints.sql` confirmed. No edge cases.
+- **Outcome**: 3 distinct non-null values confirmed: `'Servicemember'` (216,614), `'Older American'` (133,725), `'Older American, Servicemember'` (31,874). Combined tag is always Older American–first. Total tagged rows: ~382K (~11.1% of dataset). `LIKE '%Servicemember%'` and `LIKE '%Older American%'` both correctly parse all 3 values. Coverage floor: CFPB added tags in Release 11, February 2016 — pre-2016 complaints are structurally null, not missing data.
+  - **Action**: → `tags_is_servicemember` and `tags_is_older_american` added to `staging/stg_cfpb_complaints.sql` ✓. `tags` raw column preserved alongside flags.
 
 ---
 
@@ -159,10 +161,15 @@ Queries without a downstream build decision are deprioritized. Exploration is sc
 ### exploration.sql
 **Status**: partial
 
-- **Outcome**: 5a/5b: `top_holder` confirmed as right join grain (~94% of top-50-by-assets institutions have `top_holder` populated). Normalization quirks documented: `&` without spaces (`JPMORGAN CHASE&CO`), BCORP vs BANCORP, trailing THE (`BANK OF NY MELLON CORP THE`), abbreviated words (`FINL`, `BK OF COM`).
-  - **Action**: → `top_holder` as crosswalk join key. `staging/_models.yml`. Normalization quirks → deferred to `int_fdic_banks_normalized` (Phase 3).
+- **Outcome**: 5a/5b: `top_holder` confirmed as right join grain (~94% of top-50-by-assets institutions have `top_holder` populated). Top holders by combined assets: JPMorgan $3.4T, BofA $2.5T, Wells Fargo $1.7T, Citi $1.7T, US Bancorp $582B, PNC $534B, Truist $532B, Capital One $515B. Normalization quirks confirmed: `&` without spaces (`JPMORGAN CHASE&CO`, `WELLS FARGO&COMPANY`), BCORP vs BANCORP (`U S BCORP`, `FIFTH THIRD BCORP`), trailing THE (`GOLDMAN SACHS GROUP INC THE`, `BANK OF NY MELLON CORP THE`), abbreviated words (`FINL` → FINANCIAL, `BK OF COM` → BANK OF COMMERCE). Two nulls in top 50: First Republic Bank (failed Mar 2023), Zions Bancorporation.
+  - **Action**: → `top_holder` as crosswalk join key. Normalization quirks → `int_fdic_banks_normalized` (Phase 3).
 
-- **Outcome**: 5c (naive uppercase join test — baseline match rate between CFPB names and FDIC `top_holder`) — *not yet run*. Query is active in file (not commented out). Intentionally deferred: crosswalk seed strategy already decided; run later for README/interview talking points. 5d is commented out.
+- **Outcome**: 5c (naive uppercase join test — baseline match rate between CFPB names and FDIC `top_holder`) — *not yet run*. Query is active in file. Run for DECISIONS.md talking point.
+
+- **Outcome**: 5e (suffix-strip fuzzy match) — 7/12 bank crosswalk entries matched cleanly (Ally, AmEx, BofA, Capital One, Citi, Discover, JPMorgan). 5 failures fixed in `seeds/company_crosswalk.csv`: (1) Wells Fargo — crosswalk had `WELLS FARGO & CO`, FDIC stores `WELLS FARGO&COMPANY` (no spaces, full COMPANY not CO); (2) USAA — crosswalk had `USAA`, FDIC uses `UNITED SERVICES AUTOMOBILE ASSN`; (3) Santander — `SANTANDER HOLDINGS USA INC` doesn't exist in FDIC, corrected to `BANCO SANTANDER SA` (ultimate parent of Santander Bank N.A.); (4–5) SunTrust + BB&T historical entries — `SUNTRUST BANKS INC` and `BB&T CORP` are pre-merger entities no longer in current FDIC (active-only snapshot); added `TRUIST BANK` → `TRUIST FINANCIAL CORP` row for post-2019 complaints. Synchrony Financial `fdic_top_holder` filled in (`SYNCHRONY FINANCIAL`, $87B assets confirmed).
+  - **Action**: → `seeds/company_crosswalk.csv` updated. SunTrust/BB&T historical rows are correct for era but won't join to current FDIC snapshot — document in DECISIONS.md.
+
+- **Outcome**: 5f (first-token LIKE scan) — *not yet run*. Use for any row where 5e returns no match. Swap in the company's primary word (e.g. `SYNCHRONY`). Manual follow-up only.
 
 ---
 

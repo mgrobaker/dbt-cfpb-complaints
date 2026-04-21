@@ -57,7 +57,11 @@ renamed as (
             trim(zip_code)
         )                                    as zip_code,
 
-        trim(tags)                           as tags,
+        trim(tags)                                              as tags,
+        -- Tags added Feb 2016; pre-2016 complaints are structurally null — not missing data.
+        coalesce(trim(tags) like '%Servicemember%', false)     as tags_is_servicemember,
+        coalesce(trim(tags) like '%Older American%', false)    as tags_is_older_american,
+
         trim(submitted_via)                  as submitted_via,
 
         -- 4 nulls exist; assumption: no response filed = untimely response.

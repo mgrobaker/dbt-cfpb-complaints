@@ -201,6 +201,25 @@ models:
           Coverage: field added February 2016 (CFPB Release 11). Pre-2016 complaints
           (2012–2015 in our dataset) are structurally null — not a data quality issue.
           Use 2016 as the effective floor for any tags-based analysis.
+      - name: tags_is_servicemember
+        description: >
+          TRUE if tags includes 'Servicemember'. Covers active duty, National Guard,
+          Reservists, Veterans, retirees, and their spouses/dependents. FALSE for
+          pre-Feb 2016 complaints (structurally null) and untagged complaints.
+          Gate any analysis on date_received >= '2016-02-01'.
+      - name: tags_is_older_american
+        description: >
+          TRUE if tags includes 'Older American' (age ≥ 62 as reported by submitter).
+          FALSE for pre-Feb 2016 and untagged complaints. Same coverage floor as
+          tags_is_servicemember.
+
+      - name: zip_code_is_valid
+        description: >
+          TRUE if zip_code matches r'^\d{5}$' after staging cleanup. FALSE for null
+          zips, non-numeric values, and 48 known corrupted zips. Note: CFPB intentional
+          3-digit privacy zips incorrectly pass as TRUE after staging LPAD — see
+          docs/data-quality-notes.md § ZIP Code.
+
       - name: submitted_via
         description: >
           Intake channel (Web, Phone, Referral, etc.). accepted_values at severity: warn
@@ -305,3 +324,56 @@ models:
         description: Total assets in USD. Sort key for size-based cohorts.
       - name: active
         description: Always TRUE in this table (source pre-filtered to active institutions).
+
+  - name: stg_company_crosswalk
+    description: >
+      Typed staging pass over the company_crosswalk seed. raw_company_name is
+      normalized identically to stg_cfpb_complaints.company_name_normalized
+      (UPPER + collapsed whitespace + trailing punct stripped) so the join in
+      int_complaints_with_company works on equal keys. One row per raw CFPB
+      company name variant.
+    columns:
+      - name: raw_company_name
+        description: >
+          Normalized CFPB company name variant — join key to company_name_normalized
+          in stg_cfpb_complaints. Same normalization expression applied to both sides.
+        tests:
+          - not_null
+          - unique
+      - name: canonical_name
+        description: >
+          Human-readable company name used as the grouping key in dim_company
+          (e.g. "JPMorgan Chase", "Truist"). Multiple raw variants map to one
+          canonical name; rebranded entities (SunTrust, BB&T) also map to Truist.
+        tests:
+          - not_null
+      - name: category
+        description: >
+          Company type. Controls which downstream enrichments apply:
+          only bank-category rows join to FDIC data.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - bank
+                  - credit_bureau
+                  - debt_collector
+                  - mortgage_servicer
+                  - student_loan_servicer
+                  - fintech
+                  - other
+      - name: fdic_top_holder
+        description: >
+          Raw FDIC top_holder value used to join to int_fdic_banks_normalized.
+          Null for non-bank categories and for bank entities with no FDIC record
+          (e.g. foreign-parented subsidiaries). Pre-merger SunTrust and BB&T
+          entries carry historically-correct values (SUNTRUST BANKS INC, BB&T CORP)
+          but these no longer exist in the current FDIC active-institutions snapshot.
+      - name: parent_as_of
+        description: >
+          Effective date of entity change for known rebrands. Null means the row
+          represents a current (or historically stable) entity. Non-null rows:
+          SunTrust → Truist (2019-12-01), BB&T → Truist (2019-12-01),
+          Alliance Data → Bread Financial (2021-02-01). Used by the company_renames
+          snapshot to surface SCD2 rebrand history.
