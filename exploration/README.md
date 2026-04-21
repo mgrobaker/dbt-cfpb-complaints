@@ -87,7 +87,14 @@ Status of each exploration query. Update as you run things.
 
 - **Outcome**: Narrative rate by product × year (post-June 2015 only) — *not yet run*
 
-**➡ NEXT SESSION: start here** — run narrative rate query, then move to `anomalies.sql` (tags co-occurrence + zip code validity).
+**➡ NEXT SESSION: start here** — run in this order, then build the crosswalk:
+
+1. **`anomalies.sql`** — tags co-occurrence + zip validity (blocks `tags_is_servicemember`, `tags_is_older_american`, `zip_code_is_valid` staging flags)
+2. **`temporal.sql`** — resolution time distribution (blocks `days_to_resolution` clamping logic and `_models.yml` documentation)
+3. **Narrative rate query below** — `has_narrative` rate by product × year (interview color; informs MetricFlow `narrative_rate` metric framing)
+4. **`fdic/exploration.sql` query 5c** — naive uppercase join test (DECISIONS.md talking point for crosswalk justification)
+
+Queries without a downstream build decision have been deprioritized. Exploration is scoped to questions that shape model decisions, not exhaustive coverage.
 
 ---
 
