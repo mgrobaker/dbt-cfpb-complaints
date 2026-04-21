@@ -12,3 +12,7 @@ models:
       +materialized: view
     marts:
       +materialized: table
+
+snapshots:
+  cfpb_complaints:
+    +target_schema: snapshots

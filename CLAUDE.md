@@ -33,5 +33,30 @@ Global convention for secrets layout: `~/.claude/claude-technical.md` § Secrets
 - Daily scan quota is capped (~30 GB) — user will raise temporarily when needed.
 - Billed on **bytes scanned**, not compute time. Prefer a single scan with conditional aggregation over multiple UNION ALL passes.
 - Metadata queries (`INFORMATION_SCHEMA`, `bq show`) are free.
-- **Write SQL to files in `exploration/`; don't run queries via Python/API.** User runs queries interactively in DBCode and pastes results back.
+
+## Running Queries
+
+Claude can run queries directly via the `bq` CLI using service account impersonation (no JSON key needed). Auth is via `gcloud auth application-default login` (user's Google identity) impersonating the `dbt-local` service account.
+
+**Save to file when:** the query shapes a build decision, documents a finding, or will be re-run (validation queries). File goes in the appropriate `exploration/` subfolder (`cfpb/`, `fdic/`, `validation/`, etc.) — not necessarily at the top level. One statement per file; `bq` runs one statement per invocation.
+
+**Run inline when:** it's a transient debug query — triggered by a specific failure, not worth keeping once resolved (row counts, coverage checks, "does this value exist?" sanity checks).
+
+**Inline query protocol:** Before submitting an inline `bq` command for approval, describe in one sentence what the query does and what you expect to learn from it. This lets the user understand what they're approving without reading the SQL.
+
+**File-based workflow:**
+1. Write SQL to the appropriate `exploration/` subfolder
+2. Show the file path and contents for review
+3. Run via `bq` — permission prompt is the approval gate
+
+**Standard invocations:**
+```bash
+# From file (single statement)
+bq --project_id=dbt-portfolio-493318 --quiet query --use_legacy_sql=false --format=pretty < exploration/path/to/query.sql
+
+# Inline
+bq --project_id=dbt-portfolio-493318 --quiet query --use_legacy_sql=false --format=pretty 'SELECT ...'
+```
+
+Impersonation is set via `gcloud config set auth/impersonate_service_account` — no per-command flag needed. Add `--max_rows=N` for large results.
 

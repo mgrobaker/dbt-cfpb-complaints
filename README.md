@@ -4,6 +4,8 @@ A dbt project modeling the [CFPB Consumer Complaint Database](https://www.consum
 
 **Status**: In development.
 
+> **Note**: This project runs on a private GCP project. The code is public for portfolio review; the underlying warehouse and data are not accessible to others. To replicate, you'd need your own BigQuery project and to load the CFPB dataset yourself.
+
 ## Stack
 
 - **Warehouse**: BigQuery (native public dataset: `bigquery-public-data.cfpb_complaints`)
