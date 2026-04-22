@@ -159,10 +159,27 @@ models:
         description: Number of FDIC-chartered subsidiaries under this holding company.
       - name: total_assets_usd
         description: Sum of total_assets across all charters in USD (FDIC source is in thousands).
+        tests:
+          - not_null:
+              config:
+                where: "fdic_top_holder is not null"
       - name: bank_size_bucket
         description: >
           Asset-tier label calibrated to the crosswalk universe:
           mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+        tests:
+          - not_null:
+              config:
+                where: "fdic_top_holder is not null"
+          - accepted_values:
+              arguments:
+                values:
+                  - "mega (>$1T)"
+                  - "large ($400B-$1T)"
+                  - "mid ($175B-$400B)"
+                  - "smaller (<$175B)"
+              config:
+                where: "fdic_top_holder is not null"
       - name: is_supervised_cfpb
         description: TRUE if any charter under this holder is CFPB-supervised.
       - name: avg_roa

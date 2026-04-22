@@ -220,7 +220,10 @@ The test suite uses generic tests for column-level invariants and singular SQL t
 - `assert_crosswalk_coverage` — uses `HAVING` on an aggregate to fail if the crosswalk match rate drops below 74%. Encodes the empirically-validated coverage floor as a regression guard; any seed change that degrades coverage breaks loudly.
 - `assert_complaint_dates_ordered` — verifies `date_sent_to_company >= date_received`, scoped to post-2014-04-26 to skip a known intake-system artifact (7,036 pre-2015 rows with -1 day offsets). The date filter encodes documented domain knowledge so the test doesn't flag known-bad historical rows.
 - `assert_dispute_era_nulls` — warns when rows with `is_dispute_era = false` have non-null `consumer_disputed`. Set to `severity: warn` rather than error because the 2017 transition year has ~30% fill — a signal, not a hard invariant.
+- `assert_mart_bank_rates_in_range` — verifies `timely_response_rate` and `dispute_rate` are both in [0, 1]. A value outside that range means a broken COUNTIF/COUNT ratio; the test returns the offending row for immediate diagnosis.
 
-The pattern: generic tests for "this column must always be X," singular tests for "this structural property of the data pipeline must hold."
+`where:` clauses scope several tests to the rows where a constraint actually applies: `total_assets` in `stg_fdic_banks` is only asserted not_null for institutions with a `top_holder` (4 of 4,756 institution records have both fields null — documented edge cases excluded by the intermediate filter). `bank_size_bucket` and `total_assets_usd` in `dim_bank` are only asserted for FDIC-enriched rows (Barclays has a documented null enrichment gap). `accepted_values` on `category` in `int_complaints_with_company` only fires for crosswalked rows.
+
+The pattern: generic tests for "this column must always be X," singular tests for "this structural property of the data pipeline must hold," and `where:` clauses to scope both to the population where the invariant is meaningful.
 
 ---

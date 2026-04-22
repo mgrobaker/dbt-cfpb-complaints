@@ -330,7 +330,13 @@ models:
       - name: cfpb_supervisory_flag
         description: Whether institution is under CFPB supervision.
       - name: total_assets
-        description: Total assets in USD. Sort key for size-based cohorts.
+        description: >
+          Total assets in USD. Sort key for size-based cohorts. 4 of 4,756 rows
+          are null (all also have null top_holder — excluded from int_fdic_banks_normalized).
+        tests:
+          - not_null:
+              config:
+                where: "top_holder is not null"
       - name: active
         description: Always TRUE in this table (source pre-filtered to active institutions).
 
