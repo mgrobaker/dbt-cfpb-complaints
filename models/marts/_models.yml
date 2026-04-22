@@ -61,69 +61,73 @@ models:
       - name: total_complaint_volume
         description: Total complaint count across all crosswalked raw name variants.
 
-  - name: mart_resolution_time_by_bank_size
+  - name: mart_bank_complaint_metrics
     description: >
-      Pre-aggregated summary of bank complaint patterns by asset tier. Grain: one row
-      per bank_size_bucket. Era-gated metrics are built in — dispute_rate filters to
-      is_dispute_era = true automatically; consumers need no knowledge of the policy cutoff.
-      Tiers are calibrated to this universe (top institutions by complaint volume):
-      mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+      One row per crosswalk bank with FDIC enrichment (~23 rows; Barclays excluded —
+      no asset denominator). Joins fct_complaints → dim_bank directly on company_sk.
+      Combines scale-normalized complaint volume (complaints_per_billion_assets) with
+      routing speed and response quality metrics. bank_size_bucket is a dimension column
+      for slicing — GROUP BY bank_size_bucket on this mart for tier-level rollups.
     columns:
-      - name: bank_size_bucket
-        description: Asset-tier label — primary key of this mart.
-        tests:
-          - not_null
-          - unique
-      - name: bank_count
-        description: Distinct canonical bank names in this tier.
-      - name: bank_names
-        description: >
-          Comma-separated list of canonical bank names in this tier (STRING_AGG).
-          A bridge table would be the correct star-schema design at scale; at 3 tiers
-          and 15 banks total, the denormalized list is simpler and sufficient.
-      - name: complaint_count
-        description: Total complaints across all banks in this tier.
-      - name: avg_days_to_company
-        description: Mean CFPB routing speed (days from receipt to forwarding) for this tier.
-      - name: timely_response_rate
-        description: Share of complaints receiving a timely response.
-      - name: dispute_rate
-        description: >
-          Consumer dispute rate, restricted to is_dispute_era = true (pre-2017-04-24).
-          Ungated rate across all years is 4.3% — a meaningless denominator.
-          Era-filtered rate is 19.3%. The filter is encoded here, not left to consumers.
-      - name: avg_roa
-        description: Average return on assets across banks in this tier.
-      - name: avg_total_assets_billions
-        description: Average total assets in billions USD for banks in this tier.
-
-  - name: fct_complaints_bank_enriched
-    description: >
-      Bank-segment complaints enriched with FDIC holding-company attributes (~739K rows,
-      21.4% of total complaint volume). All fct_complaints columns are preserved; FDIC
-      attributes from dim_bank are added via company_sk. Grain: one row per complaint.
-      Use this fact for bank-tier analysis (asset size, ROA, charter count vs. complaint
-      patterns). For cross-category analysis use fct_complaints directly.
-    columns:
-      - name: complaint_id
-        description: Natural primary key — carried from fct_complaints.
+      - name: canonical_name
+        description: Primary key — canonical bank name from the crosswalk.
         tests:
           - not_null
           - unique
       - name: top_holder_normalized
         description: Display-normalized FDIC holding company name.
-      - name: charter_count
-        description: Number of FDIC-chartered subsidiaries under this bank's top holder.
-      - name: total_assets_usd
-        description: Total assets in USD for this bank's holding company.
       - name: bank_size_bucket
         description: >
-          Asset-tier label calibrated to the crosswalk universe:
-          mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+          Asset-tier label: mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+          Dimension column for slicing — not the grain of this mart.
+      - name: total_assets_billions
+        description: Total assets in billions USD.
+      - name: charter_count
+        description: Number of FDIC-chartered subsidiaries under this holding company.
       - name: is_supervised_cfpb
         description: TRUE if any charter under this bank's holder is CFPB-supervised.
       - name: avg_roa
-        description: Average return on assets for this bank's holding company.
+        description: Average return on assets (annualized FLOAT64).
+      - name: complaint_count
+        description: Total complaints for this bank across all crosswalked eras.
+      - name: complaints_per_billion_assets
+        description: >
+          complaint_count divided by total_assets_billions. Controls for scale —
+          enables fair comparison between a $3.4T bank and an $87B bank.
+        tests:
+          - not_null
+      - name: avg_days_to_company
+        description: Mean CFPB routing speed in days (receipt to forwarding).
+      - name: timely_response_rate
+        description: Share of complaints receiving a timely response.
+      - name: dispute_rate
+        description: >
+          Consumer dispute rate restricted to is_dispute_era = true (pre-2017-04-24).
+          Era-gating is encoded here; consumers need no knowledge of the policy cutoff.
+      - name: offices_count
+        description: Sum of branch/office counts across all FDIC charters under this holder.
+      - name: is_branchless
+        description: TRUE if offices_count < 50. Captures digital-only/card-focused banks.
+      - name: deposits_to_assets_ratio
+        description: sum(total_deposits) / sum(total_assets) — unit-free deposit funding ratio.
+      - name: capital_ratio
+        description: sum(equity_capital) / sum(total_assets) — unit-free balance sheet leverage.
+      - name: avg_roe
+        description: Average return on equity across all charters (FLOAT64, annualized percent).
+      - name: credit_card_institution
+        description: TRUE if any charter under this holder is classified as a credit-card institution.
+      - name: primary_specialization
+        description: FDIC specialization label from the largest-assets charter under this holder.
+      - name: bank_size_rank
+        description: Ordinal for bank_size_bucket — 1=smaller, 2=mid, 3=large, 4=mega.
+      - name: roe_percentile_rank
+        description: >
+          PERCENT_RANK() of avg_roe within this 23-bank universe (Barclays excluded).
+          0.0 = lowest ROE (HSBC at 2.77%), 1.0 = highest (American Express at 51.07%).
+      - name: offices_count_percentile_rank
+        description: >
+          PERCENT_RANK() of offices_count within this 23-bank universe.
+          0.0 = fewest offices (Ally at 1), 1.0 = most (JPMorgan at 5,029).
 
   - name: dim_bank
     description: >
@@ -159,6 +163,20 @@ models:
         description: TRUE if any charter under this holder is CFPB-supervised.
       - name: avg_roa
         description: Average return on assets across all charters (annualized FLOAT64).
+      - name: offices_count
+        description: Sum of branch/office counts across all FDIC charters under this holder.
+      - name: is_branchless
+        description: TRUE if offices_count < 50. Captures digital-only/card-focused banks.
+      - name: deposits_to_assets_ratio
+        description: sum(total_deposits) / sum(total_assets) — unit-free ratio measuring deposit funding reliance.
+      - name: capital_ratio
+        description: sum(equity_capital) / sum(total_assets) — unit-free leverage ratio.
+      - name: avg_roe
+        description: Average return on equity across all charters (FLOAT64, annualized percent).
+      - name: credit_card_institution
+        description: TRUE if any charter under this holder is classified as a credit-card institution.
+      - name: primary_specialization
+        description: FDIC specialization label from the largest-assets charter under this holder.
       - name: total_complaint_volume
         description: Total complaint count from dim_company (all crosswalked eras).
 

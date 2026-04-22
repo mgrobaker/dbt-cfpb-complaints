@@ -2,7 +2,7 @@
 
 -- One row per crosswalk bank. company_sk is the FK carried by fct_complaints,
 -- so analysts join fct_complaints → dim_bank on company_sk to add FDIC attributes.
--- 15 of 16 crosswalk banks have FDIC enrichment; Barclays (fdic_top_holder IS NULL)
+-- 23 of 24 crosswalk banks have FDIC enrichment; Barclays (fdic_top_holder IS NULL)
 -- appears with NULL FDIC columns — known gap documented in DECISIONS.md.
 
 with companies as (
@@ -27,8 +27,16 @@ select
     f.charter_count,
     f.total_assets_usd,
     f.bank_size_bucket,
+    f.bank_size_rank,
     f.is_supervised_cfpb,
     f.avg_roa,
+    f.offices_count,
+    f.is_branchless,
+    f.deposits_to_assets_ratio,
+    f.capital_ratio,
+    f.avg_roe,
+    f.credit_card_institution,
+    f.primary_specialization,
     c.total_complaint_volume
 
 from companies c

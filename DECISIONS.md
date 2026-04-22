@@ -141,3 +141,17 @@ Rationale: the source data does not record distinct events with their own timest
 Rationale: `product_normalized` has 9 values; several are analytically adjacent and would produce a cluttered chart axis. The bucketing is the analytical judgment layer that staging's normalization deliberately avoids. `card` is split from `banking` rather than merged because their complaint patterns differ materially — credit card complaints skew toward disputes and fraud, while checking/savings complaints skew toward fees and access. Merging them would obscure a meaningful signal. `dim_product` was dropped (see above) because `product_category` is the only independent attribute worth adding, and one derived column on the fact is simpler than a separate dim model.
 
 ---
+
+## Bank segment join pattern: fct_complaints → dim_bank
+
+Bank-segment analysis joins `fct_complaints` to `dim_bank` on `company_sk`. `dim_bank` is 24 rows, so the join is trivially cheap regardless of how many complaint rows are involved.
+
+Different analytical questions use this join differently:
+
+- **Complaint quality metrics by company** (routing speed, timely response rate, dispute rate): aggregate `fct_complaints` by `canonical_name` with `dim_bank` attributes as pass-through columns. This is `mart_bank_complaint_metrics`.
+- **Scale-normalized complaint burden** (complaints per $B assets): same join, add `complaint_count / (total_assets_usd / 1e9)` as a derived column. Also in `mart_bank_complaint_metrics`.
+- **Tier-level rollups** (how do mega banks compare to large banks?): `GROUP BY bank_size_bucket` on `mart_bank_complaint_metrics`. No separate tier mart needed — `bank_size_bucket` is a dimension column, not a grain.
+- **Cross-category analysis** (banks vs. credit bureaus vs. debt collectors): use `fct_complaints` directly with `category` as the grouping dimension. `dim_bank` is bank-specific and not relevant here.
+- **Complaint-level detail with bank attributes**: join `fct_complaints → dim_bank` in the consuming query directly. `dim_bank`'s small size means no performance reason to pre-materialize a wide enriched fact.
+
+---

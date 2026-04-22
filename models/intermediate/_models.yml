@@ -39,6 +39,32 @@ models:
           Tiers reflect natural breaks in this population, not industry-standard FDIC buckets.
         tests:
           - not_null
+      - name: bank_size_rank
+        description: Ordinal for bank_size_bucket — 1=smaller, 2=mid, 3=large, 4=mega. Useful for ORDER BY.
+      - name: offices_count
+        description: Sum of branch/office counts across all charters under this holder.
+      - name: is_branchless
+        description: >
+          TRUE if offices_count < 50. Captures digital-only/card-focused institutions
+          (Goldman 6, Ally 1, AmEx 2, USAA 2, Discover 2, Synchrony 3, HSBC 43).
+          Gap to nearest branched institution (Santander 480) confirms 50 as a stable cutoff.
+      - name: deposits_to_assets_ratio
+        description: >
+          sum(total_deposits) / sum(total_assets) across all charters — unit-free (both in thousands).
+          Measures reliance on deposit funding; higher = more traditional deposit-funded bank.
+      - name: capital_ratio
+        description: >
+          sum(equity_capital) / sum(total_assets) across all charters — unit-free.
+          Measures balance sheet leverage; lower = more leveraged.
+      - name: avg_roe
+        description: Average return on equity across all charters (FLOAT64, annualized percent).
+      - name: credit_card_institution
+        description: TRUE if any charter under this holder is classified as a credit-card institution.
+      - name: primary_specialization
+        description: >
+          FDIC specialization label from the largest-assets charter under this holder.
+          For multi-charter holders (175 of 4,756 have mixed specs), the largest charter
+          best represents the business mix — ARRAY_AGG IGNORE NULLS ORDER BY total_assets DESC LIMIT 1.
 
   - name: int_complaints_with_company
     description: >
