@@ -358,6 +358,7 @@ models:
                 values:
                   - bank
                   - credit_bureau
+                  - credit_union
                   - debt_collector
                   - mortgage_servicer
                   - student_loan_servicer

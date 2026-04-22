@@ -58,61 +58,36 @@ WHERE rnk <= 100
 ORDER BY rnk;
 
 -- ================================================================
--- Pick top entities besides the credit bureaus
+-- Top 30 companies by complaint volume (all types, including credit bureaus)
+-- Shows what the crosswalk covers and what cumulative % each rank reaches.
 -- ================================================================
-WITH normalized AS (
+WITH counts AS (
   SELECT
     REGEXP_REPLACE(
       REGEXP_REPLACE(UPPER(TRIM(company_name)), r'\s+', ' '),
       r'[.,;:]+$', ''
-    ) AS company_name_normalized
-  FROM `raw.cfpb_complaints`
-  WHERE date_received BETWEEN '2012-01-01' AND '2022-12-31'
-),
-counts AS (
-  SELECT
-    company_name_normalized,
+    ) AS company_name_normalized,
     COUNT(*) AS n
-  FROM normalized
-  GROUP BY company_name_normalized
-),
-credit_bureaus AS (
-  SELECT company_name_normalized FROM counts
-  WHERE company_name_normalized IN (
-    'EQUIFAX, INC', 
-    'TRANSUNION INTERMEDIATE HOLDINGS, INC',
-    'EXPERIAN INFORMATION SOLUTIONS INC'
-  )
-),
-bank_counts AS (
-  SELECT c.company_name_normalized, c.n
-  FROM counts c
-  LEFT JOIN credit_bureaus cb USING (company_name_normalized)
-  WHERE cb.company_name_normalized IS NULL
-),
-totals AS (
-  SELECT SUM(n) AS total_all FROM counts
+  FROM `dbt-portfolio-493318.raw.cfpb_complaints`
+  WHERE date_received BETWEEN '2012-01-01' AND '2022-12-31'
+  GROUP BY 1
 ),
 ranked AS (
   SELECT
-    bc.company_name_normalized,
-    bc.n,
-    ROW_NUMBER() OVER (ORDER BY bc.n DESC) AS rnk,
-    SUM(bc.n) OVER () AS total_banks,
-    t.total_all,
-    SUM(bc.n) OVER (ORDER BY bc.n DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_n_banks
-  FROM bank_counts bc
-  CROSS JOIN totals t
+    company_name_normalized,
+    n,
+    ROW_NUMBER() OVER (ORDER BY n DESC)                                                  AS rnk,
+    SUM(n) OVER ()                                                                       AS total_n,
+    SUM(n) OVER (ORDER BY n DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)      AS cum_n
+  FROM counts
 )
 
 SELECT
   rnk,
   company_name_normalized,
-  n                                                         AS complaints,
-  ROUND(100 * n / total_all, 2)                            AS pct_of_all,
-  ROUND(100 * n / total_banks, 2)                          AS pct_of_banks,
-  ROUND(100 * cum_n_banks / total_all, 2)                  AS cum_pct_of_all,
-  ROUND(100 * cum_n_banks / total_banks, 2)                AS cum_pct_of_banks
+  n                                          AS complaints,
+  ROUND(100.0 * n / total_n, 2)             AS pct_of_all,
+  ROUND(100.0 * cum_n / total_n, 2)         AS cum_pct
 FROM ranked
 WHERE rnk <= 30
 ORDER BY rnk;

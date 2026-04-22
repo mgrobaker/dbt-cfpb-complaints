@@ -1,6 +1,14 @@
 version: 2
 
 models:
+  - name: metricflow_time_spine
+    description: MetricFlow time spine — wraps dim_date for semantic layer queries.
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+
   - name: dim_date
     description: >
       Date spine from 2011-01-01 to 2023-12-31, one row per calendar day.
@@ -12,11 +20,53 @@ models:
           - not_null
           - unique
 
+  - name: dim_company
+    description: >
+      One row per canonical company in the crosswalk (~30 entities after deduplication).
+      Grain is canonical_name — multiple raw CFPB name variants and pre-merger rebrand
+      rows collapse to a single dim row. Temporal stats (first/last seen, volume) are
+      computed from fct_complaints and reflect all complaint eras for that canonical entity.
+    columns:
+      - name: company_sk
+        description: Surrogate key — FARM_FINGERPRINT(canonical_name).
+        tests:
+          - not_null
+          - unique
+      - name: canonical_name
+        description: Human-readable company name from the crosswalk seed.
+        tests:
+          - not_null
+          - unique
+      - name: category
+        description: >
+          Company type: bank, credit_bureau, credit_union, debt_collector,
+          mortgage_servicer, student_loan_servicer, fintech, or other.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [bank, credit_bureau, credit_union, debt_collector,
+                         mortgage_servicer, student_loan_servicer, fintech, other]
+      - name: is_credit_bureau
+        description: TRUE for Equifax, TransUnion, Experian, LexisNexis.
+      - name: fdic_top_holder
+        description: >
+          FDIC top_holder key for the current entity. Populated for bank rows only.
+          Pre-merger rebrand rows (SunTrust, BB&T) carry historically-correct
+          top_holders that no longer appear in the active FDIC snapshot — see DECISIONS.md.
+      - name: first_seen_date
+        description: Earliest date_received across all complaints for this canonical company.
+      - name: last_seen_date
+        description: Latest date_received across all complaints for this canonical company.
+      - name: total_complaint_volume
+        description: Total complaint count across all crosswalked raw name variants.
+
   - name: fct_complaints
     description: >
       One row per CFPB complaint (2012–2022, ~3.4M rows). Product and issue
       columns carried directly — no dim join required. company_name_normalized
-      is the pre-crosswalk grouping key; company_sk enrichment deferred to Phase 2.
+      is kept as a debug column alongside canonical_name and category from the
+      crosswalk. company_sk enrichment deferred to Phase 2 (dim_company).
     columns:
       - name: complaint_id
         description: Natural primary key from CFPB.
@@ -32,6 +82,14 @@ models:
           Legacy CFPB product labels mapped to current taxonomy via product_mapping seed.
           Consumer Loan split into Vehicle loan or lease vs. Payday loan, title loan, or personal loan
           based on subproduct.
+      - name: product_category
+        description: >
+          Seven-bucket grouping of product_normalized: mortgage, credit_reporting,
+          debt_collection, banking (checking/savings), card (credit card + prepaid),
+          payments (money transfer/virtual currency), other (student loans, auto,
+          payday, misc). Card is split from banking — complaint patterns and volumes
+          differ significantly. Deliberate denormalization — dim_product was dropped
+          since this single attribute doesn't justify a separate dim. See DECISIONS.md.
       - name: subproduct_normalized
         description: >
           Legacy subproduct labels mapped to current taxonomy via subproduct_mapping seed.
@@ -40,10 +98,32 @@ models:
         description: Issue category. 165 distinct values.
       - name: subissue
         description: Subissue. Nullable; 20.2% null rate.
+      - name: company_sk
+        description: >
+          FK to dim_company. FARM_FINGERPRINT(canonical_name). NULL for the ~26%
+          of complaints not matched by the crosswalk.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_sk
       - name: company_name_normalized
         description: >
           Uppercased, whitespace-collapsed, trailing-punct-stripped form of
-          company_name. Pre-crosswalk grouping handle.
+          company_name. Kept as a debug column alongside canonical_name.
+      - name: canonical_name
+        description: >
+          Human-readable company name from the crosswalk seed. Null for the ~26%
+          of complaints that don't match a crosswalk entry.
+      - name: category
+        description: >
+          Company type from crosswalk: bank, credit_bureau, credit_union,
+          debt_collector, mortgage_servicer, student_loan_servicer, fintech, or
+          other. Null for uncrosswalked complaints.
+      - name: is_crosswalked
+        description: >
+          TRUE if this complaint's company_name_normalized matched a crosswalk
+          entry. ~74% of complaints are crosswalked.
 
       - name: zip_code_is_valid
         description: >

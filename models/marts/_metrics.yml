@@ -1,0 +1,189 @@
+version: 2
+
+# MetricFlow semantic layer — defines measures and metrics as code.
+# Closest dbt-native analog to LookML: metric definitions live here, not in the BI tool.
+# BI tools and dbt sl query both resolve against these definitions.
+
+semantic_models:
+  - name: complaints
+    description: >
+      Fact table grain: one row per CFPB complaint (2012–2022). Primary time
+      dimension is date_received. company entity joins to dim_company via company_sk.
+    model: ref('fct_complaints')
+    defaults:
+      agg_time_dimension: date_received
+
+    entities:
+      - name: complaint
+        type: primary
+        expr: complaint_id
+      - name: company
+        type: foreign
+        expr: company_sk
+
+    dimensions:
+      - name: date_received
+        type: time
+        type_params:
+          time_granularity: day
+      - name: product_normalized
+        type: categorical
+      - name: product_category
+        type: categorical
+      - name: state
+        type: categorical
+      - name: category
+        type: categorical
+      - name: is_crosswalked
+        type: categorical
+      - name: is_dispute_era
+        type: categorical
+        description: >
+          TRUE for complaints before 2017-04-24. Gate dispute_rate on this
+          dimension — post-era consumer_disputed is structurally null.
+      - name: is_narrative_era
+        type: categorical
+        description: >
+          TRUE for complaints on or after 2015-06-01. Gate narrative_rate on
+          this dimension — pre-era has_narrative is structurally false.
+      - name: submitted_via
+        type: categorical
+      - name: timely_response
+        type: categorical
+      - name: has_narrative
+        type: categorical
+      - name: consumer_disputed
+        type: categorical
+      - name: tags_is_servicemember
+        type: categorical
+      - name: tags_is_older_american
+        type: categorical
+
+    measures:
+      - name: complaint_count
+        description: Count of complaints.
+        agg: count
+        expr: complaint_id
+
+      - name: timely_response_count
+        description: Count of complaints with a timely company response.
+        agg: sum
+        expr: "case when timely_response then 1 else 0 end"
+
+      - name: disputed_count
+        description: >
+          Count of complaints where the consumer disputed the response.
+          Only meaningful when filtered to is_dispute_era = true.
+        agg: sum
+        expr: "case when consumer_disputed = 'Yes' then 1 else 0 end"
+
+      - name: narrative_count
+        description: >
+          Count of complaints with an attached consumer narrative.
+          Only meaningful when filtered to is_narrative_era = true.
+        agg: sum
+        expr: "case when has_narrative then 1 else 0 end"
+
+      - name: avg_days_to_company
+        description: >
+          Average CFPB routing time from receipt to forwarding. Clamped to 0
+          — the 7,036 pre-2015 -1-day intake artifacts are zeroed out.
+        agg: average
+        expr: days_to_company
+
+
+metrics:
+  # ── Simple metrics (one per measure; also serve as ratio components) ──────────
+
+  - name: complaint_count
+    label: Total Complaints
+    description: Count of all complaints in the dataset (2012–2022).
+    type: simple
+    type_params:
+      measure:
+        name: complaint_count
+
+  - name: timely_response_count
+    label: Timely Response Count
+    description: Count of complaints with a timely company response.
+    type: simple
+    type_params:
+      measure:
+        name: timely_response_count
+
+  - name: disputed_count
+    label: Disputed Count
+    description: >
+      Count of complaints where the consumer disputed the response.
+      Only meaningful when filtered to is_dispute_era = true.
+    type: simple
+    type_params:
+      measure:
+        name: disputed_count
+
+  - name: narrative_count
+    label: Narrative Count
+    description: >
+      Count of complaints with an attached consumer narrative.
+      Only meaningful when filtered to is_narrative_era = true.
+    type: simple
+    type_params:
+      measure:
+        name: narrative_count
+
+  - name: avg_days_to_company
+    label: Avg Days to Company
+    description: >
+      Average calendar days from complaint receipt to CFPB forwarding to the
+      company. Measures CFPB routing speed, not company resolution time.
+      Zero dominates 2015+ (75–92%) as CFPB progressively automated same-day
+      forwarding — low values reflect operational efficiency, not missing data.
+    type: simple
+    type_params:
+      measure:
+        name: avg_days_to_company
+
+  # ── Ratio metrics ─────────────────────────────────────────────────────────────
+
+  - name: timely_response_rate
+    label: Timely Response Rate
+    description: >
+      Share of complaints where the company responded within the CFPB deadline.
+      Universally high (>95% for top institutions) — most useful as a
+      cross-company comparator, not an absolute signal.
+    type: ratio
+    type_params:
+      numerator:
+        name: timely_response_count
+      denominator:
+        name: complaint_count
+
+  - name: dispute_rate
+    label: Dispute Rate
+    description: >
+      Share of complaints where the consumer disputed the company's response.
+      Filtered to is_dispute_era = true (pre-2017-04-24): CFPB discontinued
+      the consumer_disputed field on that exact date (Release 13), so computing
+      this metric across all years produces a meaningless denominator.
+    type: ratio
+    type_params:
+      numerator:
+        name: disputed_count
+      denominator:
+        name: complaint_count
+    filter: "{{ Dimension('complaint__is_dispute_era') }} = true"
+
+  - name: narrative_rate
+    label: Narrative Rate
+    description: >
+      Share of complaints with a consumer narrative attached (opt-in).
+      Filtered to is_narrative_era = true (on or after 2015-06-01): CFPB
+      launched the narrative feature in that release; pre-era values are
+      structurally false and would suppress the rate toward zero.
+    type: ratio
+    type_params:
+      numerator:
+        name: narrative_count
+      denominator:
+        name: complaint_count
+    filter: "{{ Dimension('complaint__is_narrative_era') }} = true"

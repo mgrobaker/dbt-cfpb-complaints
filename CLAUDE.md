@@ -52,11 +52,11 @@ Claude can run queries directly via the `bq` CLI using service account impersona
 **Standard invocations:**
 ```bash
 # From file (single statement)
-bq --project_id=dbt-portfolio-493318 --quiet query --use_legacy_sql=false --format=pretty < exploration/path/to/query.sql
+bq --project_id=dbt-portfolio-493318 --quiet query --use_legacy_sql=false --format=pretty < exploration/path/to/query.sql 2> >(grep -v "service account impersonation" >&2)
 
 # Inline
-bq --project_id=dbt-portfolio-493318 --quiet query --use_legacy_sql=false --format=pretty 'SELECT ...'
+bq --project_id=dbt-portfolio-493318 --quiet query --use_legacy_sql=false --format=pretty 'SELECT ...' 2> >(grep -v "service account impersonation" >&2)
 ```
 
-Impersonation is set via `gcloud config set auth/impersonate_service_account` — no per-command flag needed. Add `--max_rows=N` for large results.
+Impersonation is set via `gcloud config set auth/impersonate_service_account` — no per-command flag needed. Add `--max_rows=N` for large results. The `2> >(grep -v ...)` suppresses the impersonation warning without hiding real errors.
 

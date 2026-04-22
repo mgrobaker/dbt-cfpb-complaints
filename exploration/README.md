@@ -8,12 +8,10 @@ Status of each exploration query. Update as you run things.
 
 ## Current Priority
 
-Phase 2 crosswalk build is underway. Run FDIC queries first — they validate the crosswalk seed before `int_complaints_with_company` is built.
+`int_complaints_with_company` is complete (Phase 2b item 10 ✅, 39 tests pass). Two exploration queries remain for docs and interview talking points — neither blocks any model work.
 
-1. **`fdic/exploration.sql` 5b** — FDIC top holders by combined assets; confirms crosswalk `fdic_top_holder` values exist in FDIC data
-2. **`fdic/exploration.sql` 5e** — suffix-strip fuzzy match; shows which crosswalk entries resolve cleanly, which need 5f investigation
-3. **`fdic/exploration.sql` 5c** — naive uppercase join baseline (DECISIONS.md talking point: "naive join hits X%; that's why the crosswalk exists")
-4. **Narrative rate query** (`products.sql`) — `has_narrative` rate by product × year; doesn't block any build decision, worth running for MetricFlow/interview color
+1. **`fdic/exploration.sql` 5c** — naive uppercase join baseline (DECISIONS.md talking point: "naive join hits X%; that's why the crosswalk exists")
+2. **Narrative rate query** (`products.sql`) — `has_narrative` rate by product × year; worth running for MetricFlow/interview color
 
 Queries without a downstream build decision are deprioritized. Exploration is scoped to questions that shape model decisions, not exhaustive coverage.
 
@@ -40,8 +38,8 @@ Queries without a downstream build decision are deprioritized. Exploration is sc
 - **Outcome**: Top 50 companies by raw name: Equifax + TransUnion + Experian = 47% of all complaints; none have FDIC records. Mixed casing and punctuation confirmed. Rebrands visible in date ranges (SunTrust→Truist 2019, Ditech exits 2020, Alliance Data→Bread Financial ~2021).
   - **Action**: → confirmed credit bureaus out of scope for FDIC join. `company_name_normalized` expression in `staging/stg_cfpb_complaints.sql:31-34`
 
-- **Outcome**: Top 30 non-bureau companies (by normalized name, 2012–2022) = 30.14% of all complaints. Combined with top 3 credit bureaus (47%), the crosswalk covers ~77% of total volume. Remaining 23% spread across 6,660+ long-tail companies — uncategorized by design.
-  - **Action**: → crosswalk seed scoped to top 30 banks/non-bureaus. Updated scope note in "Company taxonomy & FDIC join strategy" section below.
+- **Outcome**: Top 30 companies by complaint volume (all types, 2012–2022) reach **74% cumulative coverage**. Credit bureaus are #1–3 (45.35% combined). Mix includes banks, mortgage servicers, debt collectors, student loan servicers, fintechs, and one credit union (Navy Federal). All 30 are in `seeds/company_crosswalk.csv`; coverage test set at 74%.
+  - **Action**: → crosswalk seed covers all top-30 institutions. Query 3 in `volume.sql` updated to include all company types (bureau exclusion removed). See `assert_crosswalk_coverage.sql`.
 
 ---
 
@@ -169,7 +167,7 @@ Queries without a downstream build decision are deprioritized. Exploration is sc
 - **Outcome**: 5e (suffix-strip fuzzy match) — 7/12 bank crosswalk entries matched cleanly (Ally, AmEx, BofA, Capital One, Citi, Discover, JPMorgan). 5 failures fixed in `seeds/company_crosswalk.csv`: (1) Wells Fargo — crosswalk had `WELLS FARGO & CO`, FDIC stores `WELLS FARGO&COMPANY` (no spaces, full COMPANY not CO); (2) USAA — crosswalk had `USAA`, FDIC uses `UNITED SERVICES AUTOMOBILE ASSN`; (3) Santander — `SANTANDER HOLDINGS USA INC` doesn't exist in FDIC, corrected to `BANCO SANTANDER SA` (ultimate parent of Santander Bank N.A.); (4–5) SunTrust + BB&T historical entries — `SUNTRUST BANKS INC` and `BB&T CORP` are pre-merger entities no longer in current FDIC (active-only snapshot); added `TRUIST BANK` → `TRUIST FINANCIAL CORP` row for post-2019 complaints. Synchrony Financial `fdic_top_holder` filled in (`SYNCHRONY FINANCIAL`, $87B assets confirmed).
   - **Action**: → `seeds/company_crosswalk.csv` updated. SunTrust/BB&T historical rows are correct for era but won't join to current FDIC snapshot — document in DECISIONS.md.
 
-- **Outcome**: 5f (first-token LIKE scan) — *not yet run*. Use for any row where 5e returns no match. Swap in the company's primary word (e.g. `SYNCHRONY`). Manual follow-up only.
+- **Outcome**: 5f (first-token LIKE scan) — skipped. All 12 bank crosswalk entries resolved via 5e (7 clean matches + 5 manual fixes in seed). No unmatched entries remain.
 
 ---
 
@@ -197,8 +195,10 @@ operating bank subsidiaries. Casing, punctuation, and suffixes inconsistent acro
 
 **Crosswalk seed** (`seeds/company_crosswalk.csv`, Phase 2): hand-map top CFPB
 `company_name_normalized` values to canonical names, company categories, and FDIC
-certificate numbers. Scope: top 3 credit bureaus + top 30 others ≈ 77% of complaint
-volume; long tail stays uncategorized.
+`top_holder` keys. Scope: top 30 institutions by complaint volume (all types) = **74%**
+of complaint volume; long tail stays uncategorized. Mix: banks, credit bureaus, mortgage
+servicers, debt collectors, student loan servicers, fintechs, one credit union. FDIC
+enrichment gates on `category = 'bank'` only.
 
 **`top_holder` as join grain**: FDIC's parent holding company name maps to CFPB's
 parent-corp naming much better than `institution_name`. Populated for ~94% of

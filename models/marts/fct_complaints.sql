@@ -1,5 +1,5 @@
 with complaints as (
-    select * from {{ ref('stg_cfpb_complaints') }}
+    select * from {{ ref('int_complaints_with_company') }}
 )
 
 select
@@ -10,12 +10,25 @@ select
     product,
     subproduct,
     product_normalized,
+    case product_normalized
+        when 'Mortgage'                                                                          then 'mortgage'
+        when 'Credit reporting, credit repair services, or other personal consumer reports'      then 'credit_reporting'
+        when 'Debt collection'                                                                   then 'debt_collection'
+        when 'Checking or savings account'                                                       then 'banking'
+        when 'Credit card or prepaid card'                                                       then 'card'
+        when 'Money transfer, virtual currency, or money service'                               then 'payments'
+        else 'other'
+    end                                                                                          as product_category,
     subproduct_normalized,
     issue,
     subissue,
 
+    farm_fingerprint(canonical_name)                                   as company_sk,
     company_name,
     company_name_normalized,
+    canonical_name,
+    category,
+    is_crosswalked,
     state,
     zip_code,
     zip_code_is_valid,

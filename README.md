@@ -45,4 +45,4 @@ tests/            # Singular tests (assert_*)
 
 ## Live Dashboard
 
-_Coming soon — Looker Studio dashboard connected to the marts layer._
+_Coming soon — Data Studio dashboard connected to the marts layer._
