@@ -1,6 +1,45 @@
 version: 2
 
 models:
+  - name: int_fdic_banks_normalized
+    description: >
+      Aggregates stg_fdic_banks to top_holder grain and applies display normalization.
+      One row per raw top_holder value. total_assets_usd converts FDIC thousands to USD.
+      Join key to dim_company is raw top_holder (not the normalized display column).
+    columns:
+      - name: top_holder
+        description: Raw FDIC top_holder string — primary join key to dim_company.fdic_top_holder.
+        tests:
+          - not_null
+          - unique
+      - name: top_holder_normalized
+        description: >
+          Display-only normalized name. Applies: whitespace collapse, '&' spacing,
+          BCORP→BANCORP, FINL→FINANCIAL, trailing THE stripped.
+        tests:
+          - not_null
+      - name: charter_count
+        description: Number of FDIC-chartered subsidiary banks under this top holder.
+        tests:
+          - not_null
+      - name: total_assets_usd
+        description: >
+          Sum of total_assets across all charters, converted to USD
+          (FDIC source stores thousands; multiplied ×1000 here).
+        tests:
+          - not_null
+      - name: is_supervised_cfpb
+        description: TRUE if any charter under this holder is CFPB-supervised.
+      - name: avg_roa
+        description: Average return on assets across all charters (FLOAT64, annualized).
+      - name: bank_size_bucket
+        description: >
+          Asset-tier label calibrated to the CFPB crosswalk universe (top complaint
+          institutions): mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+          Tiers reflect natural breaks in this population, not industry-standard FDIC buckets.
+        tests:
+          - not_null
+
   - name: int_complaints_with_company
     description: >
       stg_cfpb_complaints left-joined to the company crosswalk on

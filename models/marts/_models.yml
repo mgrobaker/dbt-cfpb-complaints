@@ -61,6 +61,107 @@ models:
       - name: total_complaint_volume
         description: Total complaint count across all crosswalked raw name variants.
 
+  - name: mart_resolution_time_by_bank_size
+    description: >
+      Pre-aggregated summary of bank complaint patterns by asset tier. Grain: one row
+      per bank_size_bucket. Era-gated metrics are built in — dispute_rate filters to
+      is_dispute_era = true automatically; consumers need no knowledge of the policy cutoff.
+      Tiers are calibrated to this universe (top institutions by complaint volume):
+      mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+    columns:
+      - name: bank_size_bucket
+        description: Asset-tier label — primary key of this mart.
+        tests:
+          - not_null
+          - unique
+      - name: bank_count
+        description: Distinct canonical bank names in this tier.
+      - name: bank_names
+        description: >
+          Comma-separated list of canonical bank names in this tier (STRING_AGG).
+          A bridge table would be the correct star-schema design at scale; at 3 tiers
+          and 15 banks total, the denormalized list is simpler and sufficient.
+      - name: complaint_count
+        description: Total complaints across all banks in this tier.
+      - name: avg_days_to_company
+        description: Mean CFPB routing speed (days from receipt to forwarding) for this tier.
+      - name: timely_response_rate
+        description: Share of complaints receiving a timely response.
+      - name: dispute_rate
+        description: >
+          Consumer dispute rate, restricted to is_dispute_era = true (pre-2017-04-24).
+          Ungated rate across all years is 4.3% — a meaningless denominator.
+          Era-filtered rate is 19.3%. The filter is encoded here, not left to consumers.
+      - name: avg_roa
+        description: Average return on assets across banks in this tier.
+      - name: avg_total_assets_billions
+        description: Average total assets in billions USD for banks in this tier.
+
+  - name: fct_complaints_bank_enriched
+    description: >
+      Bank-segment complaints enriched with FDIC holding-company attributes (~739K rows,
+      21.4% of total complaint volume). All fct_complaints columns are preserved; FDIC
+      attributes from dim_bank are added via company_sk. Grain: one row per complaint.
+      Use this fact for bank-tier analysis (asset size, ROA, charter count vs. complaint
+      patterns). For cross-category analysis use fct_complaints directly.
+    columns:
+      - name: complaint_id
+        description: Natural primary key — carried from fct_complaints.
+        tests:
+          - not_null
+          - unique
+      - name: top_holder_normalized
+        description: Display-normalized FDIC holding company name.
+      - name: charter_count
+        description: Number of FDIC-chartered subsidiaries under this bank's top holder.
+      - name: total_assets_usd
+        description: Total assets in USD for this bank's holding company.
+      - name: bank_size_bucket
+        description: >
+          Asset-tier label calibrated to the crosswalk universe:
+          mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+      - name: is_supervised_cfpb
+        description: TRUE if any charter under this bank's holder is CFPB-supervised.
+      - name: avg_roa
+        description: Average return on assets for this bank's holding company.
+
+  - name: dim_bank
+    description: >
+      One row per crosswalk bank (16 rows). Enriches dim_company bank rows with FDIC
+      holding-company attributes. Join fct_complaints → dim_bank on company_sk to add
+      asset tier, ROA, and charter count to complaint-level analysis. 15 of 16 banks
+      have FDIC enrichment; Barclays carries NULL FDIC columns (fdic_top_holder unresolved).
+    columns:
+      - name: company_sk
+        description: >
+          Surrogate key — FARM_FINGERPRINT(canonical_name). FK to fct_complaints.company_sk
+          and dim_company.company_sk.
+        tests:
+          - not_null
+          - unique
+      - name: canonical_name
+        description: Human-readable company name from the crosswalk.
+        tests:
+          - not_null
+      - name: fdic_top_holder
+        description: Raw FDIC top_holder join key. NULL for Barclays (unresolved enrichment gap).
+      - name: top_holder_normalized
+        description: Display-normalized top_holder for labels and charts.
+      - name: charter_count
+        description: Number of FDIC-chartered subsidiaries under this holding company.
+      - name: total_assets_usd
+        description: Sum of total_assets across all charters in USD (FDIC source is in thousands).
+      - name: bank_size_bucket
+        description: >
+          Asset-tier label calibrated to the crosswalk universe:
+          mega (>$1T), large ($400B-$1T), mid ($175B-$400B), smaller (<$175B).
+      - name: is_supervised_cfpb
+        description: TRUE if any charter under this holder is CFPB-supervised.
+      - name: avg_roa
+        description: Average return on assets across all charters (annualized FLOAT64).
+      - name: total_complaint_volume
+        description: Total complaint count from dim_company (all crosswalked eras).
+
   - name: fct_complaints
     description: >
       One row per CFPB complaint (2012–2022, ~3.4M rows). Product and issue

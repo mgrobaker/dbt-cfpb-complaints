@@ -171,6 +171,23 @@ Queries without a downstream build decision are deprioritized. Exploration is sc
 
 ---
 
+### phase3_prep.sql
+**Status**: ✓ (all 4 queries run 2026-04-22)
+
+1. **Bank coverage summary** — bank = 21.4% of complaints (739K), 98% FDIC fill rate (725K enrichable). Credit bureau 47.6%. The 22% NULL/uncrosswalked slice breaks down as: uncrosswalked banks 3.9%, debt collectors 3.1%, mortgage servicers 1.7%, auto lenders 0.8%, fintechs 0.8%, true long tail 11.5% (4,923 companies with <~500 complaints each).
+   - **Action**: → frame Phase 3 as bank-segment analysis, not full-dataset enrichment. Coverage is meaningful (725K rows) but bounded.
+
+2. **FDIC normalization preview** — all normalization rules produce clean values. Key: `&`-spacing, `BCORP`→`BANCORP`, trailing `THE`, `FINL`→`FINANCIAL` all work correctly. `total_assets` column is in thousands USD.
+   - **Action**: → `int_fdic_banks_normalized` transformation rules confirmed. Build the model.
+
+3. **Match rate (raw-to-raw join)** — 15/15 non-null `fdic_top_holder` values match raw FDIC `top_holder`. Join design: raw-to-raw (`dim_company.fdic_top_holder` = `fdic_active_banks_lean.top_holder`); normalization in `int_fdic_banks_normalized` is display-only, not the join key. One gap: Barclays has `fdic_top_holder = NULL` (not resolved in Phase 2).
+   - **Action**: → confirm `dim_bank` join key is raw `top_holder`, not `top_holder_normalized`. Barclays gap: minor, fix optionally.
+
+4. **Asset tier + CFPB supervision + ROA** — all 15 banks CFPB-supervised (100%; flag won't differentiate within our universe). Two size tiers only: 9 mega (>$250B), 6 large ($50B–$250B). ROA varies ~10x: USAA 13.1% (atypical), AmEx 5.0%, Capital One 2.8%, JPMorgan 0.8% — useful for correlation mart.
+   - **Action**: → `dim_bank` columns: `total_assets_usd` (×1000), `bank_size_bucket` (mega/large only in practice), `is_supervised_cfpb`, `avg_roa`, `charter_count`. `total_assets` is in thousands — multiply in model.
+
+---
+
 ## Reference: Company Taxonomy & FDIC Join Strategy
 
 ### Non-bank companies in top 50

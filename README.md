@@ -8,7 +8,7 @@ A production-grade dbt project modeling the CFPB Consumer Complaint Database (3.
 
 Standard layered build: `raw` (one-time materialization with the narrative column dropped to control scan cost) → `staging` (typed, trimmed, normalized, with provenance flags) → `intermediate` (company crosswalk join) → `marts` (Kimball-style: `dim_date`, `dim_company`, `fct_complaints`) → `semantic` (MetricFlow `_metrics.yml`). A `company_renames` snapshot tracks SCD2 history on the crosswalk for known rebrands. FDIC reference data joins into `dim_company` at the parent-holder grain.
 
-![Lineage graph](https://mgrobaker.github.io/dbt-cfpb-complaints/#!/overview)
+![Lineage graph](https://mgrobaker.github.io/dbt-cfpb-complaints/#!/overview?g_v=1)
 
 [Hosted docs — lineage graph, column descriptions, test coverage](https://mgrobaker.github.io/dbt-cfpb-complaints/)
 

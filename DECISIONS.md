@@ -62,7 +62,7 @@ Rationale: a dimension earns its existence when it has independent attributes �
 
 `models/marts/_metrics.yml` defines a semantic model on `fct_complaints` and 8 metrics (`complaint_count`, `timely_response_rate`, `dispute_rate`, `narrative_rate`, `avg_days_to_company`, and their component counts).
 
-Rationale: without a semantic layer, each analyst or dashboard independently writes the same aggregation logic — and independently makes the same mistakes (e.g., computing `dispute_rate` across all years when `consumer_disputed` is only meaningful pre-2017-04-24). MetricFlow encodes the filter logic once in the metric definition; every consumer inherits it. The era-filtered metrics (`dispute_rate` gated on `is_dispute_era`, `narrative_rate` gated on `is_narrative_era`) are the concrete example: the cutoff logic lives in the YAML, not in dashboards.
+Rationale: without a semantic layer, each analyst or dashboard independently writes the same aggregation logic — and independently makes the same mistakes. The concrete example: `dispute_rate` computed across all 3.5M rows is **4.3%**; computed only against `is_dispute_era = true` (the 768K pre-2017 rows where the field was actually collected) it is **19.3%** — a 4.5× difference from the same column, same table. An ungated metric produces a number that is neither the dispute rate for the era when it was measured, nor a meaningful overall figure. MetricFlow encodes the `is_dispute_era` filter once in the metric definition; every consumer inherits it and can't accidentally get 4.3%.
 
 The closest analogy is LookML, which defines the same semantic layer for Looker. "Semantic layer / metrics framework" appears explicitly in Senior AE job descriptions; this is the dbt-native answer to that requirement.
 
