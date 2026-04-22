@@ -5,17 +5,11 @@
 -- product_normalized / subproduct_normalized: seed joins to product_mapping and subproduct_mapping.
 --   Consumer Loan + vehicle subproduct is the only case where product_normalized depends on
 --   subproduct; handled inline. All other product renames come from the product_mapping seed.
--- Rows excluded: 2011 (stub year, 2,536 rows) and 2023 (partial year through 2023-03-23).
+-- has_full_year_data: false for 2011 (stub, Dec only) and 2023 (partial, frozen 2023-03-23).
+--   Filter on this flag for clean year-over-year trend analysis.
 
 with source as (
     select * from {{ source('raw', 'cfpb_complaints') }}
-),
-
-filtered as (
-    select *
-    from source
-    where date_received >= '2012-01-01'
-      and date_received < '2023-01-01'
 ),
 
 renamed as (
@@ -84,9 +78,12 @@ renamed as (
 
         timely_response,
         consumer_disputed,
-        has_narrative
+        has_narrative,
 
-    from filtered
+        extract(year from date_received) between 2012 and 2022
+                                             as has_full_year_data
+
+    from source
 ),
 
 normalized as (

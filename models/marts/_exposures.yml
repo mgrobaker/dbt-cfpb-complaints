@@ -1,0 +1,18 @@
+version: 2
+
+exposures:
+  - name: cfpb_complaints_dashboard
+    type: dashboard
+    maturity: medium
+    url: "https://datastudio.google.com/reporting/7a6d183e-854a-46ba-8507-f375c50d71c8"
+    description: >
+      Data Studio dashboard with two live pages: (1) complaint volume over time by
+      product_category (year-quarter granularity, credit_reporting excluded to avoid
+      scale distortion), (2) top 20 companies by complaint volume colored by category.
+      A third page (timely response rate by product_category) is planned.
+    depends_on:
+      - ref('fct_complaints')
+      - ref('dim_company')
+    owner:
+      name: Mark Grobaker
+      email: mark427@gmail.com

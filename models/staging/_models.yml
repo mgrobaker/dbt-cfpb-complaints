@@ -4,8 +4,8 @@ models:
   - name: stg_cfpb_complaints
     description: >
       Staging pass over `raw.cfpb_complaints`. String columns trimmed; state uppercased.
-      Excludes 2011 (stub year, 2,536 rows) and 2023 (partial year, frozen 2023-03-23).
-      Effective date range: 2012-01-01 to 2022-12-31. One row per complaint.
+      All source rows included; use `has_full_year_data = true` to restrict to complete
+      calendar years (2012–2022). One row per complaint.
     columns:
       - name: complaint_id
         description: Natural primary key from CFPB.
@@ -292,6 +292,15 @@ models:
           then. The 2015 rate (32.5%) reflects a partial year; treat 2016 as the
           effective floor for narrative analysis.
           not_null at severity: error — derived boolean, always TRUE or FALSE.
+        tests:
+          - not_null
+
+      - name: has_full_year_data
+        description: >
+          TRUE when date_received falls in a complete calendar year (2012–2022).
+          FALSE for 2011 (December stub, 2,536 rows) and 2023 (frozen at 2023-03-23,
+          ~244K rows). Filter on this flag for clean year-over-year trend analysis;
+          leave unfiltered when the question involves partial-year data (e.g., Q1 2023).
         tests:
           - not_null
 

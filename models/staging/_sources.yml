@@ -15,6 +15,12 @@ sources:
           CFPB Consumer Complaint Database, 2011-12 through 2023-03.
           3,458,906 rows. Narrative text dropped at materialize time
           (2.31 GB → 768 MB); replaced with boolean `has_narrative`.
+        loaded_at_field: date_received
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 14, period: day}
+          # Production SLA: CFPB releases updated data weekly. This source is frozen
+          # at 2023-03-25 and will always fail freshness — expected on a static mirror.
         columns:
           - name: complaint_id
             description: Natural primary key.
@@ -54,6 +60,12 @@ sources:
         description: >
           Active FDIC-insured institutions, trimmed from 117 to 95 columns.
           All rows have `active = TRUE`. 4,756 rows.
+        loaded_at_field: repdte
+        freshness:
+          warn_after: {count: 90, period: day}
+          error_after: {count: 120, period: day}
+          # Production SLA: FDIC publishes quarterly updates. This source is a
+          # static export and will always fail freshness — expected on a static mirror.
         columns:
           - name: fdic_certificate_number
             description: FDIC certificate number — natural primary key.

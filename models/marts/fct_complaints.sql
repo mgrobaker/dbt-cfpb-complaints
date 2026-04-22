@@ -42,6 +42,7 @@ select
     timely_response,
     consumer_disputed,
     has_narrative,
+    has_full_year_data,
 
     date_received < '2017-04-24'                                      as is_dispute_era,
     date_received >= '2015-06-01'                                     as is_narrative_era,

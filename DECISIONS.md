@@ -8,7 +8,7 @@ Key design choices made during this project, with rationale. Intended for portfo
 
 `fct_complaints` carries `date_received` and `date_sent_to_company` as raw dates but does **not** denormalize `year`, `month`, or `quarter` onto the fact.
 
-Rationale: `dim_date` already provides these via a join on `date_received`. Adding them to the fact duplicates `dim_date`'s reason to exist and signals that the analyst doesn't trust the dimensional model. Any BI tool or query can extract them from the date directly (`EXTRACT(YEAR FROM date_received)`), or join to `dim_date` for richer attributes (fiscal periods, week-of-year, etc.). Keeping the fact lean also means a single `dim_date` change propagates everywhere rather than requiring a fact rebuild.
+Rationale: `dim_date` already provides these via a join on `date_received`. Adding them to the fact duplicates `dim_date`'s reason to exist and signals that the analyst doesn't trust the dimensional model. Any BI tool or query can extract them from the date directly (`EXTRACT(YEAR FROM date_received)`), or join to `dim_date` for richer attributes (fiscal periods, week-of-year, etc.). Keeping the fact lean also means a single `dim_date` change propagates everywhere rather than requiring a fact rebuild. Denormalizing date parts onto the fact is one of the most common anti-patterns in dimensional modeling; keeping them off signals the model is trusted to do its job.
 
 ---
 
@@ -16,7 +16,7 @@ Rationale: `dim_date` already provides these via a join on `date_received`. Addi
 
 `fct_complaints` includes `is_dispute_era = (date_received < '2017-04-24')`. The cutoff is CFPB's exact discontinuation date from Release 13, not a rounded year boundary.
 
-Rationale: `consumer_disputed` has 100% fill through 2016 and 0% from 2018 onward. A naive `dispute_rate` metric computed across all years produces a meaningless denominator. The flag gates the metric at the grain level so downstream queries and MetricFlow metric definitions can filter correctly without each analyst independently discovering the cutoff. Using the precise CFPB release date (`2017-04-24`) rather than `'2017-01-01'` preserves the 2017 partial-year data — ~30% fill in that year, not zero.
+Rationale: `consumer_disputed` is 78% null across the full dataset. Fill by era: 100% through 2016, 30% in 2017 (transition year), 0% from 2018 onward. A naive `dispute_rate` metric computed across all years produces a meaningless denominator. The flag gates the metric at the grain level so downstream queries and MetricFlow metric definitions can filter correctly without each analyst independently discovering the cutoff. Using the precise CFPB release date (`2017-04-24`) rather than `'2017-01-01'` preserves the 2017 partial-year data — ~30% fill in that year, not zero.
 
 ---
 
@@ -24,14 +24,15 @@ Rationale: `consumer_disputed` has 100% fill through 2016 and 0% from 2018 onwar
 
 `snapshots/company_renames.sql` tracks `canonical_name` and `fdic_top_holder` changes per `raw_company_name` using dbt's `check` strategy. In production on a live complaint feed, this would automatically record rebrands as they appear — writing a new snapshot row with `dbt_valid_from = change_timestamp` and closing the prior row's `dbt_valid_to`.
 
-This source is frozen at 2023-03-25, so the snapshot establishes initial state only; no future changes will be detected. The two known historical rebrands are encoded in the crosswalk's `parent_as_of` column instead, which records the effective date of each entity change:
+The design uses two complementary mechanisms for entity changes: `parent_as_of` in the crosswalk for known-historical rebrands (hand-curated, precise effective dates), and the dbt snapshot for unknown-future changes (automatic — no human intervention required on a live feed). Both are needed in production. `parent_as_of` captures what already happened before the seed was created; the snapshot handles everything that happens afterward.
 
+The two known historical rebrands encoded in `parent_as_of`:
 - SunTrust → Truist: 2019-12-01
 - BB&T → Truist: 2019-12-01
 
 (Alliance Data never appears in CFPB complaint data under that name — Bread Financial Holdings is its own crosswalk row with no `parent_as_of`.)
 
-Query `stg_company_crosswalk WHERE parent_as_of IS NOT NULL` to surface these. The snapshot demonstrates the Kimball SCD2 pattern and correct dbt configuration; the `parent_as_of` column demonstrates how effective dates would be tracked in the source.
+Query `stg_company_crosswalk WHERE parent_as_of IS NOT NULL` to surface these. This source is frozen at 2023-03-25, so the snapshot produces one row per company (initial state, `dbt_valid_to = NULL`) — no future changes will be detected against a static seed. On a live feed, the snapshot would detect rebrands automatically as `canonical_name` changed in the source.
 
 One known FDIC enrichment gap: pre-merger SunTrust and BB&T records carry historically-correct `fdic_top_holder` values (`SUNTRUST BANKS INC`, `BB&T CORP`), but the current FDIC snapshot is active-institutions only — those entities no longer appear. Post-2019 Truist complaints map to `TRUIST FINANCIAL CORP`, which does resolve. In production with a historical FDIC feed, pre-merger records would enrich fully.
 
@@ -53,7 +54,7 @@ CFPB complaints are filed against the brand or parent corporation the consumer r
 
 `fct_complaints` carries `product`, `product_normalized`, `issue`, `subissue`, and related columns directly rather than via FK joins to `dim_product` and `dim_issue`.
 
-Rationale: a dimension earns its existence when it has independent attributes — properties of the entity that aren't derivable from the fact. `dim_date` qualifies (quarter, fiscal period, week-of-year). `dim_company` qualifies (category, fdic_top_holder, temporal stats). Product and issue don't: the only candidate attribute was a `product_category` grouping bucket, and carrying one extra column on the fact is simpler than adding a model, a join, and a FK test for it. Keeping product and issue on the fact also makes the lineage graph easier to read — no spurious dim nodes that add hops without adding information.
+Rationale: a dimension earns its existence when it has independent attributes — properties of the entity that aren't derivable from the fact. `dim_date` qualifies (quarter, fiscal period, week-of-year). `dim_company` qualifies (category, fdic_top_holder, temporal stats). Product and issue don't: the only candidate attribute was a `product_category` grouping bucket, and carrying one extra column on the fact is simpler than adding a model, a join, and a FK test for it. Keeping product and issue on the fact also makes the lineage graph easier to read — no spurious dim nodes that add hops without adding information. If a CFPB product hierarchy or issue-severity taxonomy were introduced as a source, `dim_product` or `dim_issue` would re-earn their place — the test is whether independent attributes exist, not whether the category matters analytically.
 
 ---
 
@@ -69,33 +70,19 @@ The closest analogy is LookML, which defines the same semantic layer for Looker.
 
 ## Incremental model design for fct_complaints
 
-`fct_complaints` is materialized as a `table` (full rebuild on every run). On a live CFPB feed, this would be redesigned as an incremental model. The implementation is documented here but not built against the frozen source — there's no new data to detect, so running incremental against this dataset would just add machinery with nothing to exercise.
-
-**Configuration:**
+`fct_complaints` is materialized as a `table` against this frozen source. On a live CFPB feed, the correct design is incremental:
 
 ```sql
-{{ config(
-    materialized='incremental',
-    unique_key='complaint_id',
-    on_schema_change='append_new_columns'
-) }}
-```
-
-**Incremental filter** (appended inside the CTE, after the `where` clause that already filters 2012–2022):
-
-```sql
+{{ config(materialized='incremental', unique_key='complaint_id', on_schema_change='append_new_columns') }}
+...
 {% if is_incremental() %}
-  and date_received > (select max(date_received) from {{ this }})
+  and date_received > (select max(date_received) from {{ this }}) - interval 7 day
 {% endif %}
 ```
 
-**Why `unique_key = complaint_id`**: CFPB occasionally amends complaint records. `unique_key` tells dbt to `MERGE` on `complaint_id` rather than append-only `INSERT`, so amended records overwrite the prior row rather than duplicating it. On BigQuery this compiles to a `MERGE` statement.
+`unique_key = 'complaint_id'` compiles to a BigQuery `MERGE`, so amended CFPB records overwrite the prior row rather than duplicating it. `on_schema_change='append_new_columns'` handles CFPB's occasional field additions (tags in 2016, narrative in 2015) without breaking existing rows. The 7-day lookback window catches late-arriving complaints — CFPB occasionally routes records with older `date_received` values in later releases. `dbt run --full-refresh --select fct_complaints` rebuilds as a table for backfills or schema changes the append strategy can't handle.
 
-**Why `on_schema_change='append_new_columns'`**: new CFPB releases occasionally add fields (e.g., tags in 2016, narrative in 2015). Append-new-columns passes new columns through without breaking existing rows. `sync_all_columns` would be safer but requires a full rebuild on schema change; `fail` would block the run entirely.
-
-**Late-arriving data caveat**: the `max(date_received)` watermark assumes complaints arrive roughly in order. CFPB's public dataset occasionally has complaints with older `date_received` values arriving in later releases (agency routing delay). A production implementation would use a lookback window — e.g., `date_received > (select max(date_received) from {{ this }}) - interval 7 day` — to catch late arrivals at the cost of reprocessing the most recent week on every run.
-
-**Full-refresh escape hatch**: `dbt run --full-refresh --select fct_complaints` rebuilds as a table, useful when backfilling or after schema changes that `append_new_columns` can't handle.
+Building this against a frozen source would be theater — there's no new data to detect. The design is documented here rather than built.
 
 ---
 
@@ -104,5 +91,53 @@ The closest analogy is LookML, which defines the same semantic layer for Looker.
 The derived column is named `days_to_company`, not `days_to_resolution`.
 
 Rationale: the metric measures `date_sent_to_company - date_received` — CFPB's internal forwarding speed, not how long it took the company to resolve the complaint. "Resolution" implies the complaint is closed; forwarding just means CFPB routed it. Naming it accurately prevents downstream analysts from misreading it as a company SLA metric. Negatives (7,036 pre-2015 rows, -1 day, intake-system clock artifact) are clamped to 0 via `GREATEST(..., 0)`.
+
+---
+
+## Crosswalk seed instead of fuzzy-matching company names
+
+`seeds/company_crosswalk.csv` hand-maps the top 30 CFPB complaint institutions by volume to canonical names, categories, and FDIC `top_holder` keys. Automated fuzzy matching (edit distance, n-gram similarity) was explicitly rejected.
+
+Rationale: 41 rows covers 74% of complaint volume. The remaining 26% is a long tail of low-volume names where automated matching would have high error rates and low analytical value. Fuzzy matching produces results that are hard to audit — a reviewer can't tell whether a match was correct or coincidental. An explicit seed is transparent: every mapping is a statement of fact that a human verified. For compliance-adjacent data, auditability outweighs automation. Explainability to stakeholders ("this row maps to Equifax because we said so") is also materially easier than "cosine similarity was 0.87."
+
+---
+
+## Product taxonomy normalization in staging
+
+`stg_cfpb_complaints` applies `product_normalized` and `subproduct_normalized` CASE expressions that collapse CFPB's historical taxonomy into current-taxonomy values.
+
+Rationale: CFPB renamed and split product categories mid-dataset. Most notably: several debt collection subcategories gained "debt" suffixes across eras (e.g., "Credit card" → "Credit card debt" within debt collection). A naive `GROUP BY product` double-counts entities that changed names, making the same complaint type appear in different buckets by year. Normalization belongs in staging — not in marts — because it is a source-data judgment, not an analytical choice that should vary per mart. Every downstream consumer gets the corrected taxonomy without reimplementing the CASE.
+
+---
+
+## Partial years flagged, not filtered
+
+`stg_cfpb_complaints` carries a `has_full_year_data` boolean flag (`EXTRACT(YEAR FROM date_received) BETWEEN 2012 AND 2022`) rather than filtering out the 2011 stub and the 2023 partial year.
+
+Rationale: 2011 contains 2,536 rows (December only) and 2023 is cut off at 2023-03-23. Both are structurally partial. Filtering them silently removes real complaints and takes the exclusion decision away from downstream analysts. A flag preserves all data while making the boundary explicit: analysts who want clean year-over-year trend lines filter on `has_full_year_data = true`; analysts who want Q1 2023 data can include it. The judgment about which rows belong in a given analysis stays where it belongs — with the analyst — rather than being baked into staging.
+
+---
+
+## Narrative column dropped at raw materialization
+
+`raw.cfpb_complaints` does not contain `consumer_complaint_narrative`. It was dropped at materialization from the BigQuery public mirror; a `has_narrative` boolean flag is kept in its place.
+
+Rationale: the narrative column accounts for ~90% of the table's bytes — approximately 1.5 GB of 2.31 GB total. Since narrative text is not used in any model in this project, retaining it would significantly increase scan costs on every downstream query. The `has_narrative` flag preserves the analytical signal (opt-in rate by product, year, and company) at zero storage cost. On a capped BigQuery scan quota, this is a real constraint; the narrative drop is the first and largest optimization applied.
+
+---
+
+## Fact grain: one row per complaint
+
+`fct_complaints` is a complaint-grain fact — one row per `complaint_id`. An event-grain alternative (one row per complaint lifecycle event: received, sent to company, closed) was considered and rejected.
+
+Rationale: the source data does not record distinct events with their own timestamps — `date_received` and `date_sent_to_company` are both attributes of the same complaint record, not separate event rows. Fabricating event rows from a single source record would misrepresent the source structure. The complaint grain is accurate to the source and sufficient for every analytical question in scope: complaint counts, response rates, resolution times, and demographic segmentation all resolve at this grain without ambiguity.
+
+---
+
+## product_category 7-bucket grouping
+
+`fct_complaints` carries `product_category` as a 7-bucket classification: `mortgage`, `credit_reporting`, `debt_collection`, `banking`, `card`, `payments`, `other`. This is a derived grouping optimized for dashboard visualization and aggregation.
+
+Rationale: `product_normalized` has 9 values; several are analytically adjacent and would produce a cluttered chart axis. The bucketing is the analytical judgment layer that staging's normalization deliberately avoids. `card` is split from `banking` rather than merged because their complaint patterns differ materially — credit card complaints skew toward disputes and fraud, while checking/savings complaints skew toward fees and access. Merging them would obscure a meaningful signal. `dim_product` was dropped (see above) because `product_category` is the only independent attribute worth adding, and one derived column on the fact is simpler than a separate dim model.
 
 ---
