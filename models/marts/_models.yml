@@ -68,6 +68,10 @@ models:
       Combines scale-normalized complaint volume (complaints_per_billion_assets) with
       routing speed and response quality metrics. bank_size_bucket is a dimension column
       for slicing — GROUP BY bank_size_bucket on this mart for tier-level rollups.
+      Key finding: complaints_per_billion_assets ranges from ~8 (Goldman Sachs) to ~487
+      (Synchrony). Credit-card monolines and branchless institutions structurally generate
+      more complaints per asset dollar than traditional deposit banks — use primary_specialization
+      and is_branchless to segment before cross-bank comparisons.
     columns:
       - name: canonical_name
         description: Primary key — canonical bank name from the crosswalk.
@@ -131,9 +135,9 @@ models:
 
   - name: dim_bank
     description: >
-      One row per crosswalk bank (16 rows). Enriches dim_company bank rows with FDIC
+      One row per crosswalk bank (24 rows). Enriches dim_company bank rows with FDIC
       holding-company attributes. Join fct_complaints → dim_bank on company_sk to add
-      asset tier, ROA, and charter count to complaint-level analysis. 15 of 16 banks
+      asset tier, ROA, and charter count to complaint-level analysis. 23 of 24 banks
       have FDIC enrichment; Barclays carries NULL FDIC columns (fdic_top_holder unresolved).
     columns:
       - name: company_sk

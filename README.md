@@ -6,7 +6,7 @@ A production-grade dbt project modeling the CFPB Consumer Complaint Database (3.
 
 ## Architecture
 
-Standard layered build: `raw` (one-time materialization with the narrative column dropped to control scan cost) → `staging` (typed, trimmed, normalized, with provenance flags) → `intermediate` (company crosswalk join) → `marts` (Kimball-style: `dim_date`, `dim_company`, `fct_complaints`) → `semantic` (MetricFlow `_metrics.yml`). A `company_renames` snapshot tracks SCD2 history on the crosswalk for known rebrands. FDIC reference data joins into `dim_company` at the parent-holder grain.
+Standard layered build: `raw` (one-time materialization with the narrative column dropped to control scan cost) → `staging` (typed, trimmed, normalized, with provenance flags) → `intermediate` (company crosswalk join + FDIC aggregation) → `marts` (Kimball-style: `dim_date`, `dim_company`, `dim_bank`, `fct_complaints`, `mart_bank_complaint_metrics`) → `semantic` (MetricFlow `_metrics.yml`). A `company_renames` snapshot tracks SCD2 history on the crosswalk for known rebrands. FDIC reference data (`raw.fdic_active_banks_lean`, 4,756 institutions) joins at the top-holder grain into `dim_bank`, enabling scale-normalized bank-segment analysis.
 
 ![Lineage graph](https://mgrobaker.github.io/dbt-cfpb-complaints/#!/overview?g_v=1)
 
@@ -16,11 +16,12 @@ Standard layered build: `raw` (one-time materialization with the narrative colum
 
 If you have ten minutes, in this order:
 
-- **`DECISIONS.md`** — 14 architectural decisions with full rationale. The document to read if you want to know how I think.
-- **`models/marts/fct_complaints.sql` + `dim_company.sql`** — grain decisions, derived flags (`is_dispute_era`, `has_full_year_data`), and the FDIC enrichment join.
+- **`DECISIONS.md`** — 17 architectural decisions with full rationale. The document to read if you want to know how I think.
+- **`models/marts/fct_complaints.sql` + `dim_company.sql`** — grain decisions, derived flags (`is_dispute_era`, `has_full_year_data`), and the company crosswalk join.
+- **`models/marts/dim_bank.sql` + `mart_bank_complaint_metrics.sql`** — FDIC enrichment layer: 24-bank dimension with asset tiers, ROA, branch footprint, and a 23-bank complaint metrics mart (complaints per $B assets, routing speed, dispute rate, ROE/offices percentile ranks).
 - **`models/marts/_metrics.yml`** — MetricFlow metric definitions, including era-filtered `dispute_rate` and `narrative_rate` that can't silently compute against years where the source fields stopped being collected.
 - **`tests/`** — singular tests, especially `assert_int_complaints_no_fanout.sql` and `assert_crosswalk_coverage.sql`. These catch the failure modes generic tests miss.
-- **`seeds/company_crosswalk.csv`** — 41 rows of explicit, auditable mappings covering 74% of complaint volume. Chose this over fuzzy matching deliberately; rationale in `DECISIONS.md`.
+- **`seeds/company_crosswalk.csv`** — 51 rows of explicit, auditable mappings covering 74% of complaint volume. Three SCD2 rebrands (SunTrust→Truist, BB&T→Truist, BBVA→PNC). Chose manual seed over fuzzy matching deliberately; rationale in `DECISIONS.md`.
 - **`snapshots/company_renames.sql`** — SCD2 with `parent_as_of` for two complementary mechanisms: known-historical rebrands captured in the seed, unknown-future rebrands handled automatically by the snapshot.
 
 ## Dataset
@@ -33,7 +34,7 @@ Full rationale for each in `DECISIONS.md`:
 
 - Narrative column dropped at raw materialization — 90% of bytes; kept as `has_narrative` flag.
 - `is_dispute_era` gates `dispute_rate` in the semantic layer — the field is 78% null overall due to a 2017 policy change; un-gated, the metric is meaningless.
-- Crosswalk seed (41 rows, manual) over fuzzy matching — auditability beats automation on compliance-adjacent data.
+- Crosswalk seed (51 rows, manual) over fuzzy matching — auditability beats automation on compliance-adjacent data.
 - FDIC join on `top_holder`, not `institution_name` — parent-corp grain matches CFPB naming; `institution_name` is one level down and fragments multi-charter holders.
 - `has_full_year_data` flag preserves 2011/2023 partial years rather than silently filtering — analyst decides what to include, not staging.
 

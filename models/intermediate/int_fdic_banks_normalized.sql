@@ -33,7 +33,7 @@ aggregated as (
 
         count(*)                                                        as charter_count,
         sum(total_assets) * 1000                                       as total_assets_usd,
-        max(cfpb_supervisory_flag)                                     as is_supervised_cfpb,
+        logical_or(cfpb_supervisory_flag)                              as is_supervised_cfpb,
         round(avg(return_on_assets), 4)                                as avg_roa,
 
         case
@@ -54,7 +54,7 @@ aggregated as (
         round(avg(return_on_equity), 4)                                as avg_roe,
 
         -- business model
-        max(credit_card_institution)                                   as credit_card_institution,
+        logical_or(credit_card_institution)                            as credit_card_institution,
 
         -- primary specialization: largest charter by assets wins for multi-charter holders
         array_agg(
