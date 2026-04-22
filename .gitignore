@@ -12,6 +12,8 @@ __pycache__/
 # Credentials — keys live in ~/.secrets/, never in repo
 *.json
 !package-lock.json
+!docs/catalog.json
+!docs/manifest.json
 .env
 # profiles.yml lives at ~/.dbt/profiles.yml (standard dbt location), not in repo.
 
