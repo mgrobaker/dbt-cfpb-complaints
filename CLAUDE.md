@@ -18,7 +18,8 @@ Global convention for secrets layout: `~/.claude/claude-technical.md` § Secrets
 
 ## Key Docs
 
-- `docs/schema.md` — **authoritative column reference** for `raw.cfpb_complaints` (18 cols) and `raw.fdic_active_banks_lean` (95 cols). Check here before writing queries.
+- `models/staging/_sources.yml` — **authoritative column reference** for `raw.cfpb_complaints` (18 cols) and `raw.fdic_active_banks_lean` (95 cols). Published to the hosted dbt docs site. Check here before writing queries.
+- `models/overview.md` — `__overview__` doc block that renders as the landing page on the hosted docs site.
 - `exploration/README.md` — tracker for all exploration queries: status, outcomes, and links to downstream actions. Check before writing new exploration SQL.
 - `exploration/cfpb/` and `exploration/fdic/` — investigation queries by source. Re-runnable except `cfpb/setup/materialize.sql` (one-time).
 - Private planning mirror: `$PRIVATE_NOTES_DIR` (see `.env`). Contains `README.md` (strategy + session handoff), `exploration-findings.md` (DQ findings, interview talking points), `warehouse-comparison.md`. Read when you need strategy context; don't write dbt code there.

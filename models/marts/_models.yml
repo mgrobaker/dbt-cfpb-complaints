@@ -10,6 +10,10 @@ models:
         granularity: day
 
   - name: dim_date
+    config:
+      meta:
+        tier: mart
+        owner: mark
     description: >
       Date spine from 2011-01-01 to 2023-12-31, one row per calendar day.
       Generated via BigQuery GENERATE_DATE_ARRAY — no dbt-utils dependency.
@@ -21,6 +25,11 @@ models:
           - unique
 
   - name: dim_company
+    config:
+      meta:
+        tier: mart
+        owner: mark
+        portfolio_priority: high
     description: >
       One row per canonical company in the crosswalk (~30 entities after deduplication).
       Grain is canonical_name — multiple raw CFPB name variants and pre-merger rebrand
@@ -62,6 +71,11 @@ models:
         description: Total complaint count across all crosswalked raw name variants.
 
   - name: mart_bank_complaint_metrics
+    config:
+      meta:
+        tier: mart
+        owner: mark
+        portfolio_priority: high
     description: >
       One row per crosswalk bank with FDIC enrichment (~23 rows; Barclays excluded —
       no asset denominator). Joins fct_complaints → dim_bank directly on company_sk.
@@ -134,6 +148,11 @@ models:
           0.0 = fewest offices (Ally at 1), 1.0 = most (JPMorgan at 5,029).
 
   - name: dim_bank
+    config:
+      meta:
+        tier: mart
+        owner: mark
+        portfolio_priority: high
     description: >
       One row per crosswalk bank (24 rows). Enriches dim_company bank rows with FDIC
       holding-company attributes. Join fct_complaints → dim_bank on company_sk to add
@@ -202,6 +221,11 @@ models:
         description: Total complaint count from dim_company (all crosswalked eras).
 
   - name: fct_complaints
+    config:
+      meta:
+        tier: mart
+        owner: mark
+        portfolio_priority: high
     description: >
       One row per CFPB complaint (2012–2022, ~3.4M rows). Product and issue
       columns carried directly — no dim join required. company_name_normalized

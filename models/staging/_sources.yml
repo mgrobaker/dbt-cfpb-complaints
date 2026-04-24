@@ -67,6 +67,7 @@ sources:
           # Production SLA: FDIC publishes quarterly updates. This source is a
           # static export and will always fail freshness — expected on a static mirror.
         columns:
+          # Identity & ownership
           - name: fdic_certificate_number
             description: FDIC certificate number — natural primary key.
             tests:
@@ -74,15 +75,209 @@ sources:
               - unique
           - name: institution_name
             description: Operating bank legal name (e.g. "JPMorgan Chase Bank, National Association").
+          - name: trade_name_1
+            description: DBA (doing-business-as) name, if different from institution_name.
+          - name: fdic_id
+            description: '-'
+          - name: rssd_id
+            description: Federal Reserve RSSD identifier.
+          - name: ultimate_cert_number
+            description: '-'
+          - name: parent_parcert
+            description: '-'
+
+          # Status flags
+          - name: active
+            description: All rows TRUE in this table (source is pre-filtered to active institutions).
+          - name: conservatorship
+            description: '-'
+          - name: denovo_institute
+            description: '-'
+
+          # Location
+          - name: address
+            description: '-'
+          - name: city
+            description: '-'
+          - name: state
+            description: 2-char US state/territory code.
+          - name: state_name
+            description: '-'
+          - name: state_fips_code
+            description: '-'
+          - name: zip_code
+            description: '-'
+          - name: county_name
+            description: '-'
+          - name: county_fips_code
+            description: '-'
+          - name: cbsa_name
+            description: Core-Based Statistical Area name.
+          - name: cbsa_fips_code
+            description: '-'
+          - name: cbsa_metro_flag
+            description: '-'
+          - name: cbsa_micro_flag
+            description: '-'
+          - name: cbsa_division_name
+            description: '-'
+          - name: cbsa_division_fips_code
+            description: '-'
+          - name: cbsa_division_flag
+            description: '-'
+          - name: csa_name
+            description: Combined Statistical Area name.
+          - name: csa_fips_code
+            description: '-'
+          - name: csa_indicator
+            description: '-'
+
+          # Charter & regulator
+          - name: bank_charter_class
+            description: '-'
+          - name: chartering_agency
+            description: '-'
+          - name: federal_charter
+            description: '-'
+          - name: state_chartered
+            description: '-'
+          - name: occ_charter
+            description: '-'
+          - name: occ_district
+            description: '-'
+          - name: regulator
+            description: '-'
+          - name: category_code
+            description: '-'
+          - name: ots_region
+            description: OTS region. Known "West" vs "Western" inconsistency in source — normalize in staging.
+          - name: qbp_region
+            description: '-'
+          - name: fdic_geo_region
+            description: '-'
+          - name: fdic_supervisory_region
+            description: '-'
+          - name: fdic_supervisory_region_code
+            description: '-'
+          - name: fdic_field_office
+            description: '-'
+          - name: fed_reserve_district
+            description: '-'
+          - name: fed_reserve_district_id
+            description: '-'
+          - name: fed_reserve_unique_id
+            description: '-'
+          - name: docket
+            description: '-'
+
+          # CFPB supervisory scope
+          - name: cfpb_supervisory_flag
+            description: Whether the institution is under CFPB supervision.
+          - name: cfpb_supervisory_start_date
+            description: Mostly 2011-07-21 for large banks (CFPB's original supervisory roster).
+          - name: cfpb_supervisory_end_date
+            description: '-'
+
+          # Insurance
+          - name: fdic_insured
+            description: '-'
+          - name: deposit_insurance_date
+            description: '-'
+          - name: deposit_insurance_fund_member
+            description: '-'
+          - name: bank_insurance_fund_member
+            description: '-'
+          - name: insurance_fund_membership
+            description: '-'
+          - name: secondary_insurance_fund
+            description: '-'
+          - name: insured_commercial_bank
+            description: '-'
+          - name: insured_savings_institute
+            description: '-'
+
+          # Holding company
+          - name: holding_company_flag
+            description: '-'
+          - name: holding_company_state
+            description: '-'
+          - name: high_holder_city
+            description: '-'
           - name: top_holder
             description: >
               Parent holding company name (e.g. "JPMORGAN CHASE & CO.").
               Primary bridge to CFPB `company_name` for bank-side complaint joins.
-          - name: cfpb_supervisory_flag
-            description: Whether the institution is under CFPB supervision.
+          - name: ownership_type
+            description: '-'
+          - name: subchap_s_indicator
+            description: Subchapter S corporation tax status flag.
+
+          # Business characteristics
+          - name: primary_specialization
+            description: FDIC specialization category (e.g. commercial lending, credit card, agricultural).
+          - name: asset_concentration_hierarchy
+            description: '-'
+          - name: credit_card_institution
+            description: '-'
+          - name: ag_lending_flag
+            description: Agricultural lending concentration flag.
+          - name: trust_powers_status
+            description: '-'
+          - name: iba
+            description: International Banking Act designation flag.
+          - name: ffiec_call_report_filer
+            description: '-'
+          - name: law_sasser
+            description: '-'
+
+          # Financials
           - name: total_assets
             description: Total assets in USD. Primary sort key for size-based analysis.
-          - name: ots_region
-            description: OTS region. Known "West" vs "Western" inconsistency in source — normalize in staging.
+          - name: total_deposits
+            description: '-'
+          - name: total_domestic_deposits
+            description: '-'
+          - name: equity_capital
+            description: '-'
+          - name: net_income
+            description: '-'
+          - name: quarterly_net_income
+            description: '-'
+          - name: return_on_assets
+            description: Annualized ROA (percent).
+          - name: roa_quarterly
+            description: '-'
+          - name: roa_pretax
+            description: '-'
           - name: row_pretax_quarterly
             description: Pre-tax quarterly return on equity. Column name is a source typo (row_ should be roe_).
+          - name: return_on_equity
+            description: Annualized ROE (percent).
+          - name: roe_quarterly
+            description: '-'
+
+          # Offices & dates
+          - name: offices_count
+            description: Total office/branch count (domestic + foreign + territories).
+          - name: office_count_domestic
+            description: '-'
+          - name: office_count_foreign
+            description: '-'
+          - name: office_count_us_territories
+            description: '-'
+          - name: established_date
+            description: '-'
+          - name: last_structural_change
+            description: '-'
+          - name: effective_date
+            description: '-'
+          - name: end_effective_date
+            description: '-'
+          - name: report_date
+            description: '-'
+          - name: reporting_period_end_date
+            description: '-'
+          - name: last_updated
+            description: '-'
+          - name: run_date
+            description: '-'
