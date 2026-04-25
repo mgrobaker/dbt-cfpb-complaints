@@ -1,6 +1,10 @@
 # Setup
 
+[← Back to README](README.md)
+
 Getting this project running locally.
+
+The project I built runs on a private BigQuery project, so the warehouse itself isn't externally accessible. To replicate end-to-end, provision your own BigQuery project, load the CFPB public dataset, and follow the steps below for credentials and configuration.
 
 ## Prerequisites
 
@@ -32,6 +36,8 @@ In the GCP console:
    `chmod 600` the file (Linux/macOS) so only you can read it.
 
 ## 3. Configure environment variables
+
+Copy [`.env.example`](.env.example) and fill in your values:
 
 ```bash
 cp .env.example .env
@@ -66,7 +72,7 @@ uv run dbt --version
 
 ## 5. dbt profile
 
-This repo commits a `profiles.yml` in the project root that reads credentials from environment variables — no secrets in the file. dbt discovers it automatically when run from the repo root.
+This repo commits a [`profiles.yml`](profiles.yml) in the project root that reads credentials from environment variables — no secrets in the file. dbt discovers it automatically when run from the repo root.
 
 Required env vars (set via `.env`):
 - `GOOGLE_APPLICATION_CREDENTIALS` — absolute path to your service account JSON

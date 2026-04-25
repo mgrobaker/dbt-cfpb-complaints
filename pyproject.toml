@@ -7,3 +7,11 @@ dependencies = [
     "dbt-bigquery>=1.11.1",
     "dbt-core>=1.11.8",
 ]
+
+# dbt-metricflow is intentionally NOT pinned here. The current release
+# (dbt-metricflow==0.10.1) requires dbt-core<1.11, which conflicts with the
+# dbt-core>=1.11.8 pin above. uv pip install is permissive enough to install
+# both anyway and the mf CLI works fine in practice — `mf query` validates
+# semantic-layer queries against BigQuery successfully. To install for runtime
+# validation: `uv pip install dbt-metricflow`. Re-pin once dbt-metricflow
+# publishes a release that supports dbt-core 1.11.
