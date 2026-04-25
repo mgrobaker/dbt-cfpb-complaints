@@ -87,6 +87,13 @@ models:
         description: Top-level issue taxonomy (165 distinct values).
       - name: subissue
         description: Issue subcategory; ~20% null.
+      - name: issue_category
+        description: >
+          Eight-bucket semantic roll-up of issue via the issue_mapping seed.
+          Values: credit_reporting, debt_collection, payment_servicing,
+          account_management, transactions_fees, application_origination,
+          fraud_identity_theft, other. Defaults to 'other' if a future issue
+          string is missing from the seed.
 
       - name: company_name
         description: >
@@ -337,6 +344,8 @@ models:
           - not_null:
               config:
                 where: "top_holder is not null"
+      - name: holding_company_state
+        description: Two-character USPS state code for the holding company's domicile state.
       - name: active
         description: Always TRUE in this table (source pre-filtered to active institutions).
 

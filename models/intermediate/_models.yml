@@ -65,6 +65,12 @@ models:
           FDIC specialization label from the largest-assets charter under this holder.
           For multi-charter holders (175 of 4,756 have mixed specs), the largest charter
           best represents the business mix — ARRAY_AGG IGNORE NULLS ORDER BY total_assets DESC LIMIT 1.
+      - name: hq_state
+        description: >
+          Two-character USPS state code of the holding company HQ from FDIC's
+          holding_company_state field. For multi-charter holders, the largest
+          charter by assets wins (same tie-break used for primary_specialization).
+          Nullable for crosswalk banks without FDIC enrichment.
 
   - name: int_complaints_with_company
     description: >

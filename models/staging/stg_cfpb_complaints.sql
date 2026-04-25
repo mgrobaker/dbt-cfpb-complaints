@@ -7,6 +7,8 @@
 --   subproduct; handled inline. All other product renames come from the product_mapping seed.
 -- has_full_year_data: false for 2011 (stub, Dec only) and 2023 (partial, frozen 2023-03-23).
 --   Filter on this flag for clean year-over-year trend analysis.
+-- issue_category: 8-bucket roll-up of the 165 raw issue strings via the issue_mapping seed.
+--   Same pattern as product_mapping / subproduct_mapping.
 
 with source as (
     select * from {{ source('raw', 'cfpb_complaints') }}
@@ -100,6 +102,7 @@ normalized as (
         )                                    as product_normalized,
         coalesce(sm.subproduct_normalized, r.subproduct)
                                              as subproduct_normalized,
+        coalesce(im.issue_category, 'other') as issue_category,
         coalesce(regexp_contains(r.zip_code, r'^\d{5}$'), false)
                                              as zip_code_is_valid
     from renamed r
@@ -108,6 +111,8 @@ normalized as (
     left join {{ ref('subproduct_mapping') }} sm
         on r.product = sm.raw_product
         and coalesce(r.subproduct, '') = coalesce(sm.raw_subproduct, '')
+    left join {{ ref('issue_mapping') }} im
+        on r.issue = im.issue
 )
 
 select * from normalized

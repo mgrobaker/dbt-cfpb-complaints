@@ -37,6 +37,7 @@ select
     f.avg_roe,
     f.credit_card_institution,
     f.primary_specialization,
+    f.hq_state,
     c.total_complaint_volume
 
 from companies c

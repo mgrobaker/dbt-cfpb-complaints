@@ -70,6 +70,110 @@ models:
       - name: total_complaint_volume
         description: Total complaint count across all crosswalked raw name variants.
 
+  - name: mart_bank_complaints_monthly
+    config:
+      meta:
+        tier: mart
+        owner: mark
+        portfolio_priority: high
+    description: >
+      Time-series companion to mart_bank_complaint_metrics. Grain:
+      canonical_name × month_start × product_category (~17.5K rows across the same
+      23-bank universe — Barclays excluded, no asset denominator). Bank attributes
+      (size bucket, branchless flag, primary specialization, total assets,
+      CFPB-supervised flag) are denormalized for BI ergonomics.
+
+      Measures store COMPONENTS, not rates: complaint_count, timely_response_count,
+      routed_same_day_count, sum_days_to_company, era-gated denominators
+      (complaint_count_dispute_era, complaint_count_narrative_era), and era-gated
+      numerators (disputed_count, narrative_count). Rates are derived at
+      consumption time — sum the components and divide. This is the
+      Simpson's-paradox-safe pattern: averaging stored monthly rates does not
+      produce the correct rate of the summed components, but summing components
+      and dividing does. Era-gated numerators are NULL (not zero) for cells with
+      no in-era complaints; the rate is undefined, not zero.
+
+      Use mart_bank_complaint_metrics for the executive bank-grain summary
+      (percentile ranks, complaints_per_billion_assets) — its grain is the right
+      one for cross-bank ranking. Use this mart for time-series, product-cut, or
+      time × product cuts on the same universe.
+    columns:
+      - name: company_sk
+        description: Surrogate key from dim_bank — FK to fct_complaints.company_sk and dim_company.company_sk.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_bank')
+                field: company_sk
+      - name: canonical_name
+        description: Bank canonical name from the crosswalk. Repeats across months and product categories.
+        tests:
+          - not_null
+      - name: month_start
+        description: First day of the calendar month — DATE_TRUNC(date_received, MONTH). FK to dim_date.date_day for the month-start row.
+        tests:
+          - not_null
+      - name: product_category
+        description: >
+          Seven-bucket product roll-up from fct_complaints: mortgage, credit_reporting,
+          debt_collection, banking, card, payments, other. See fct_complaints YAML for
+          the bucketing rationale.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [mortgage, credit_reporting, debt_collection, banking, card, payments, other]
+      - name: bank_size_bucket
+        description: Asset-tier label passed through from dim_bank — mega/large/mid/smaller. Identical across all rows for a given canonical_name.
+      - name: bank_size_rank
+        description: Ordinal for bank_size_bucket — 1=smaller, 2=mid, 3=large, 4=mega.
+      - name: is_branchless
+        description: TRUE if the bank's offices_count < 50. Pass-through from dim_bank.
+      - name: primary_specialization
+        description: FDIC specialization label from the largest-assets charter under this holder. Pass-through from dim_bank.
+      - name: total_assets_billions
+        description: Bank total assets in billions USD. Identical across all rows for a given canonical_name in this frozen-source build.
+      - name: is_supervised_cfpb
+        description: TRUE if any charter under this bank's holder is CFPB-supervised. Pass-through from dim_bank.
+
+      - name: complaint_count
+        description: Total complaints for this bank × month × product cell.
+        tests:
+          - not_null
+      - name: timely_response_count
+        description: Complaints in this cell with timely_response = TRUE. Numerator for timely_response_rate.
+      - name: routed_same_day_count
+        description: Complaints in this cell with days_to_company = 0. Numerator for pct_routed_same_day.
+      - name: sum_days_to_company
+        description: >
+          Sum of days_to_company across complaints in this cell. Stored as a
+          component so analysts can derive avg_days_to_company at any rollup
+          (sum / complaint_count) — averaging monthly averages does not produce
+          the correct overall average.
+
+      - name: complaint_count_dispute_era
+        description: >
+          Number of complaints in this cell with is_dispute_era = TRUE
+          (date_received < 2017-04-24). Denominator for dispute_rate.
+          Cells in April 2017 split across the cutoff, so this is a per-cell
+          count rather than a derived month-level boolean.
+      - name: complaint_count_narrative_era
+        description: >
+          Number of complaints in this cell with is_narrative_era = TRUE
+          (date_received >= 2015-06-01). Denominator for narrative_rate.
+
+      - name: disputed_count
+        description: >
+          Number of in-dispute-era complaints in this cell where the consumer
+          disputed the response. NULL when complaint_count_dispute_era = 0
+          (rate is undefined, not zero). Numerator for dispute_rate.
+      - name: narrative_count
+        description: >
+          Number of in-narrative-era complaints in this cell with a consumer
+          narrative attached. NULL when complaint_count_narrative_era = 0.
+          Numerator for narrative_rate.
+
   - name: mart_bank_complaint_metrics
     config:
       meta:
@@ -87,8 +191,13 @@ models:
       more complaints per asset dollar than traditional deposit banks — use primary_specialization
       and is_branchless to segment before cross-bank comparisons.
     columns:
+      - name: company_sk
+        description: Surrogate key from dim_bank. Carried through so MetricFlow's bank-grain semantic model can share the `company` entity with the complaints semantic model.
+        tests:
+          - not_null
+          - unique
       - name: canonical_name
-        description: Primary key — canonical bank name from the crosswalk.
+        description: Canonical bank name from the crosswalk.
         tests:
           - not_null
           - unique
@@ -114,14 +223,29 @@ models:
           enables fair comparison between a $3.4T bank and an $87B bank.
         tests:
           - not_null
+      - name: first_complaint_date
+        description: Earliest date_received across this bank's complaints. Useful for "is this bank's data current?" cuts.
+      - name: last_complaint_date
+        description: Latest date_received across this bank's complaints.
       - name: avg_days_to_company
         description: Mean CFPB routing speed in days (receipt to forwarding).
+      - name: pct_routed_same_day
+        description: >
+          Share of complaints with days_to_company = 0 — the more decision-relevant
+          cut on routing speed. Same-day routing is dominant 2015+ (75–92% across
+          the dataset); avg_days_to_company is preserved alongside but lacks this
+          denominator context.
       - name: timely_response_rate
         description: Share of complaints receiving a timely response.
       - name: dispute_rate
         description: >
           Consumer dispute rate restricted to is_dispute_era = true (pre-2017-04-24).
           Era-gating is encoded here; consumers need no knowledge of the policy cutoff.
+      - name: narrative_rate
+        description: >
+          Share of complaints with consumer narrative attached, restricted to
+          is_narrative_era = true (date_received >= 2015-06-01). Era-gated for the
+          same reason as dispute_rate — pre-2015 narratives are structurally null.
       - name: offices_count
         description: Sum of branch/office counts across all FDIC charters under this holder.
       - name: is_branchless
@@ -217,6 +341,12 @@ models:
         description: TRUE if any charter under this holder is classified as a credit-card institution.
       - name: primary_specialization
         description: FDIC specialization label from the largest-assets charter under this holder.
+      - name: hq_state
+        description: >
+          Two-character USPS state code of the holding company HQ from FDIC's
+          holding_company_state field. For multi-charter holders, the largest
+          charter by assets wins (same tie-break used for primary_specialization).
+          Nullable for crosswalk banks without FDIC enrichment.
       - name: total_complaint_volume
         description: Total complaint count from dim_company (all crosswalked eras).
 
@@ -262,6 +392,29 @@ models:
         description: Issue category. 165 distinct values.
       - name: subissue
         description: Subissue. Nullable; 20.2% null rate.
+      - name: issue_category
+        description: >
+          Eight-bucket roll-up of the 165 raw issue values via the issue_mapping
+          seed: credit_reporting, debt_collection, payment_servicing,
+          account_management, transactions_fees, application_origination,
+          fraud_identity_theft, other. Bucketing is semantic, not product-conditional —
+          the same string maps to the same category regardless of product. Bank-segment
+          distribution is well-spread across the top six buckets (no bucket >25%);
+          full-dataset distribution is dominated by credit_reporting (~55%) due to
+          credit-bureau volume.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - credit_reporting
+                  - debt_collection
+                  - payment_servicing
+                  - account_management
+                  - transactions_fees
+                  - application_origination
+                  - fraud_identity_theft
+                  - other
       - name: company_sk
         description: >
           FK to dim_company. FARM_FINGERPRINT(canonical_name). NULL for the ~26%
@@ -328,3 +481,30 @@ models:
           7,036 pre-2015 rows had a -1 day artifact (intake system clock issue);
           GREATEST clamps these to 0. Zero dominates 2015+ (75–92%) — reflects
           CFPB progressive automation of same-day forwarding, not a data artifact.
+      - name: days_to_company_bucket
+        description: >
+          Coarse bucketing of days_to_company for distribution analysis:
+          '0_same_day', '1_to_3', '4_to_14', '15_plus'. On-theme with the
+          routing-speed story; share of '0_same_day' is the headline cut.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['0_same_day', '1_to_3', '4_to_14', '15_plus']
+      - name: had_monetary_relief
+        description: >
+          TRUE iff company_response_to_consumer = 'Closed with monetary relief'.
+          Common-filter convenience boolean. Legacy 'Closed with relief' (5K rows,
+          pre-2013) is excluded — the label doesn't disambiguate monetary vs.
+          non-monetary relief.
+      - name: response_category
+        description: >
+          Three-bucket roll-up of company_response_to_consumer:
+          'relief' (monetary, non-monetary, or legacy 'Closed with relief'),
+          'explanation_only' (Closed with explanation, Closed without relief,
+          terse 'Closed'), 'other' (Untimely response, In progress).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['relief', 'explanation_only', 'other']

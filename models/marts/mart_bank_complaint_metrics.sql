@@ -17,6 +17,7 @@ banks as (
 
 aggregated as (
     select
+        b.company_sk,
         b.canonical_name,
         b.top_holder_normalized,
         b.bank_size_bucket,
@@ -35,17 +36,26 @@ aggregated as (
 
         count(*)                                                        as complaint_count,
         round(count(*) / (b.total_assets_usd / 1e9), 2)               as complaints_per_billion_assets,
+        min(c.date_received)                                           as first_complaint_date,
+        max(c.date_received)                                           as last_complaint_date,
         round(avg(c.days_to_company), 2)                               as avg_days_to_company,
+        round(countif(c.days_to_company = 0) / count(*), 4)            as pct_routed_same_day,
         round(countif(c.timely_response) / count(*), 4)                as timely_response_rate,
         round(
             countif(c.consumer_disputed and c.is_dispute_era)
             / nullif(countif(c.is_dispute_era), 0),
             4
-        )                                                               as dispute_rate
+        )                                                               as dispute_rate,
+        round(
+            countif(c.has_narrative and c.is_narrative_era)
+            / nullif(countif(c.is_narrative_era), 0),
+            4
+        )                                                               as narrative_rate
 
     from complaints c
     inner join banks b on c.company_sk = b.company_sk
     group by
+        b.company_sk,
         b.canonical_name,
         b.top_holder_normalized,
         b.bank_size_bucket,

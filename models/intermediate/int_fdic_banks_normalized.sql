@@ -5,7 +5,7 @@
 -- source. total_assets_usd multiplies ×1000; ratios use thousands directly (unit-free).
 -- Excluded: ownership_type (false for all 3,442 FDIC holders — zero variance);
 -- office_count_domestic (near-identical to offices_count in our universe).
--- primary_specialization: largest-charter-by-assets wins for multi-charter holders
+-- primary_specialization, hq_state: largest charter by assets wins for multi-charter holders
 -- (175 holders span multiple values; largest charter best represents the business).
 
 with banks as (
@@ -61,7 +61,14 @@ aggregated as (
             primary_specialization ignore nulls
             order by total_assets desc
             limit 1
-        )[offset(0)]                                                    as primary_specialization
+        )[offset(0)]                                                    as primary_specialization,
+
+        -- hq state: largest charter by assets wins for multi-charter holders
+        array_agg(
+            holding_company_state ignore nulls
+            order by total_assets desc
+            limit 1
+        )[offset(0)]                                                    as hq_state
 
     from banks
     group by top_holder
@@ -90,6 +97,7 @@ select
     capital_ratio,
     avg_roe,
     credit_card_institution,
-    primary_specialization
+    primary_specialization,
+    hq_state
 
 from aggregated

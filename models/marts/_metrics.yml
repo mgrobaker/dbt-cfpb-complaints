@@ -75,7 +75,7 @@ semantic_models:
           Count of complaints where the consumer disputed the response.
           Only meaningful when filtered to is_dispute_era = true.
         agg: sum
-        expr: "case when consumer_disputed = 'Yes' then 1 else 0 end"
+        expr: "case when consumer_disputed then 1 else 0 end"
 
       - name: narrative_count
         description: >
@@ -90,6 +90,55 @@ semantic_models:
           — the 7,036 pre-2015 -1-day intake artifacts are zeroed out.
         agg: average
         expr: days_to_company
+
+  # ── Bank-grain semantic model ────────────────────────────────────────────────
+  # Built on mart_bank_complaint_metrics (one row per crosswalk bank) rather than
+  # dim_bank, because MetricFlow requires every measure to have an agg_time_dimension
+  # and the metrics mart carries last_complaint_date as a natural time dimension.
+  # Shares the `company` entity (canonical_name) with the complaints semantic model,
+  # so complaints_per_billion_assets resolves via that entity at any rollup grain.
+  - name: banks
+    description: >
+      One row per FDIC-enriched crosswalk bank (23). Provides the asset
+      denominator for complaints_per_billion_assets and bank-level dimensions
+      (size bucket, specialization, branchless flag) for cross-bank cuts.
+    model: ref('mart_bank_complaint_metrics')
+    defaults:
+      agg_time_dimension: last_complaint_date
+
+    entities:
+      - name: company
+        type: primary
+        expr: company_sk
+
+    dimensions:
+      - name: last_complaint_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: bank_size_bucket
+        type: categorical
+      - name: is_branchless
+        type: categorical
+      - name: primary_specialization
+        type: categorical
+      - name: is_supervised_cfpb
+        type: categorical
+      - name: credit_card_institution
+        type: categorical
+
+    measures:
+      - name: total_assets_billions
+        description: >
+          SUM of total_assets_billions across the rows in scope. The aggregation
+          is sum, not average — at bank grain it reads as the bank's own asset
+          size; at any rollup (e.g. by bank_size_bucket or primary_specialization)
+          it returns the summed assets of all banks in that group, which is the
+          right denominator for complaints_per_billion_assets at that grain.
+          Excludes Barclays — already filtered out of mart_bank_complaint_metrics
+          (no asset denominator).
+        agg: sum
+        expr: total_assets_billions
 
 
 metrics:
@@ -187,3 +236,70 @@ metrics:
       denominator:
         name: complaint_count
     filter: "{{ Dimension('complaint__is_narrative_era') }} = true"
+
+  # ── Bank-grain metrics ───────────────────────────────────────────────────────
+  - name: total_assets_billions
+    label: "Sum of Bank Assets ($B)"
+    description: >
+      Aggregation: SUM. At bank grain, reads as that bank's own asset size;
+      at any rollup beyond a single bank (e.g. group by bank_size_bucket),
+      reads as the summed assets of every bank in the group. Always a sum,
+      never an average — the label and metric semantics make this explicit
+      so consumers don't misread a tier-level value as a per-bank average.
+    type: simple
+    type_params:
+      measure:
+        name: total_assets_billions
+
+  # ── Time-comparison metrics ──────────────────────────────────────────────────
+  # Demonstrate metric_time / offset_window: each metric references complaint_count
+  # twice — current period and a same-named offset alias — and the BI tool /
+  # dbt sl query computes the ratio at whatever metric_time grain it asks for.
+
+  - name: complaint_count_mom_pct_change
+    label: Complaint Count MoM % Change
+    description: >
+      Month-over-month percentage change in complaint_count: (current − prior_month) / prior_month.
+      Resolves at any time grain via metric_time; querying with metric_time__month
+      gives a per-month series of MoM growth rates.
+    type: derived
+    type_params:
+      expr: "(complaint_count - complaint_count_prior_month) / nullif(complaint_count_prior_month, 0)"
+      metrics:
+        - name: complaint_count
+        - name: complaint_count
+          offset_window: 1 month
+          alias: complaint_count_prior_month
+
+  - name: complaint_count_yoy_pct_change
+    label: Complaint Count YoY % Change
+    description: >
+      Year-over-year percentage change in complaint_count: (current − prior_year) / prior_year.
+      A more stable trend signal than MoM — smooths over the seasonal pattern visible
+      in the monthly series. Same offset_window mechanic, longer window.
+    type: derived
+    type_params:
+      expr: "(complaint_count - complaint_count_prior_year) / nullif(complaint_count_prior_year, 0)"
+      metrics:
+        - name: complaint_count
+        - name: complaint_count
+          offset_window: 1 year
+          alias: complaint_count_prior_year
+
+  # ── Derived: combines measures across the complaints and banks semantic models ──
+  - name: complaints_per_billion_assets
+    label: Complaints per $B Assets
+    description: >
+      Scale-normalized complaint volume — complaint_count / total_assets_billions.
+      Joins the complaints semantic model (fct_complaints grain) and the banks
+      semantic model (dim_bank grain) on the shared `company` entity. The
+      headline finding of the project (range ~8 at Goldman to ~487 at Synchrony)
+      now lives in the semantic layer, so any consumer (BI tool, dbt sl query)
+      computes the same number at any cut — by bank, by bank_size_bucket, by
+      primary_specialization — without re-deriving the ratio.
+    type: derived
+    type_params:
+      expr: complaint_count / total_assets_billions
+      metrics:
+        - name: complaint_count
+        - name: total_assets_billions
